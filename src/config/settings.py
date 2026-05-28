@@ -53,6 +53,36 @@ class Settings(BaseSettings):
         default="development"
     )
 
+    # --- Enrichment flags (PHASE TWO — all default OFF in MVP) ---
+    # When false, the system uses only cheap YouTube auto-captions.
+    # Flip these on in phase two to enable richer (and costlier) capture.
+    enable_whisper: bool = Field(
+        default=False,
+        description="Re-transcribe audio with Whisper instead of using auto-captions",
+    )
+    enable_visual_extraction: bool = Field(
+        default=False,
+        description="Extract charts/tables/data from video frames via vision AI",
+    )
+    # Tier-selection thresholds (used in phase two to decide which content
+    # earns expensive enrichment). Ignored while enrichment flags are off.
+    whisper_min_expert_score: float = Field(
+        default=65.0,
+        description="Only Whisper-transcribe content from experts above this score",
+    )
+    visual_min_expert_score: float = Field(
+        default=70.0,
+        description="Only visual-extract content from experts above this score",
+    )
+    visual_min_number_density: int = Field(
+        default=8,
+        description="Only visual-extract if transcript mentions at least this many numbers",
+    )
+    # Whisper execution mode: 'api' (pay per minute) or 'local' (run on own GPU)
+    whisper_mode: Literal["api", "local"] = Field(default="api")
+    # Vision model to use for frame extraction in phase two
+    vision_model: str = Field(default="claude-opus-4-7")
+
     # --- Optional ---
     sentry_dsn: str = Field(default="")
 

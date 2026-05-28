@@ -110,25 +110,19 @@ def fetch_transcript(video_id: str) -> str | None:
     Returns None if no transcript is available.
     """
     try:
-        # Instantiate the client (older versions expose instance methods)
-        api = YouTubeTranscriptApi()
+        # Prefer English; fall back to first available
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # Prefer English; fall back to any available language
         try:
-            entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
+            transcript = transcript_list.find_transcript(["en", "en-US", "en-IN"])
         except NoTranscriptFound:
-            entries = api.fetch(video_id)
+            transcript = next(iter(transcript_list), None)
+            if transcript is None:
+                return None
 
-        # `entries` items may be dicts or objects with a `text` attribute
-        parts: list[str] = []
-        for entry in entries:
-            if hasattr(entry, "text"):
-                parts.append(entry.text)
-            else:
-                parts.append(entry.get("text", ""))
-
-        text = " ".join(parts).strip()
-        return text if text else None
+        entries = transcript.fetch()
+        text = " ".join(entry["text"] for entry in entries)
+        return text
 
     except (TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
         logger.info(f"No transcript for video {video_id}: {type(e).__name__}")
@@ -153,9 +147,18 @@ def video_already_ingested(video_id: str) -> bool:
 
 def ingest_video(expert_id: str, video: dict[str, Any]) -> dict[str, Any] | None:
     """
-    Ingest a single video: fetch transcript, store in content_pieces.
+    Ingest a single video: capture transcript, store in content_pieces.
     Returns the inserted row, or None if skipped.
+
+    Uses the swappable TranscriptCapture abstraction. The MVP uses
+    YouTubeAutoCaptionCapture. In phase two, the orchestrator can choose
+    WhisperCapture for high-value content by flipping settings.enable_whisper —
+    this function does not need to change because both return TranscriptResult.
     """
+    from datetime import datetime
+
+    from src.ingestion.youtube_capture import YouTubeAutoCaptionCapture
+
     video_id = video["video_id"]
     url = f"https://youtube.com/watch?v={video_id}"
 
@@ -163,8 +166,20 @@ def ingest_video(expert_id: str, video: dict[str, Any]) -> dict[str, Any] | None
         logger.debug(f"Skipping already-ingested video: {video_id}")
         return None
 
-    transcript = fetch_transcript(video_id)
-    if not transcript:
+    # Parse publish date so capture can assign confidence based on video age.
+    published_at = video["published_at"]
+    pub_dt = None
+    if isinstance(published_at, str):
+        try:
+            pub_dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        except ValueError:
+            pub_dt = None
+
+    # MVP capture method. Phase two: select method based on settings + expert score.
+    capturer = YouTubeAutoCaptionCapture(published_at=pub_dt)
+    result = capturer.capture(video_id)
+
+    if result is None:
         logger.info(f"No transcript available for: {video['title'][:60]}")
         return None
 
@@ -172,13 +187,22 @@ def ingest_video(expert_id: str, video: dict[str, Any]) -> dict[str, Any] | None
         "expert_id": expert_id,
         "source_url": url,
         "title": video["title"],
-        "published_at": video["published_at"],
-        "raw_text": transcript,
-        "word_count": len(transcript.split()),
+        "published_at": published_at,
+        "raw_text": result.text,
+        "word_count": result.word_count,
+        # Enrichment fields — populated with capture metadata.
+        "transcript_source": result.source.value,
+        "transcript_confidence": result.confidence,
+        "enrichment_tier": "tier1_transcript",
+        "has_visual_extraction": False,
     }
 
     inserted = insert_one("content_pieces", row)
-    logger.info(f"Ingested: {video['title'][:60]} ({row['word_count']} words)")
+    logger.info(
+        f"Ingested: {video['title'][:60]} "
+        f"({row['word_count']} words, {result.source.value}, "
+        f"conf={result.confidence})"
+    )
     return inserted
 
 

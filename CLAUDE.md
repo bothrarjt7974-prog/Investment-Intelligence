@@ -102,3 +102,28 @@ Capture meaningful product decisions in `docs/decision_log.md`. Required for:
 - 1 user: the founder
 
 Do not expand scope until MVP is operating reliably.
+
+## Enrichment Strategy (visual + Whisper) — design now, build in phase two
+
+The MVP captures transcripts only, via YouTube auto-captions (cheap, fast).
+Phase two adds richer capture for high-value content:
+
+- **Tier 1 (MVP):** transcript only, all content
+- **Tier 2 (phase 2):** + Whisper re-transcription for old/unreliable/high-value content
+- **Tier 3 (phase 2):** + visual frame extraction (charts, data) for flagship content
+
+**Capture is swappable by design.** Any transcript method returns a
+`TranscriptResult` (see `src/ingestion/capture_types.py`); any visual method
+returns `VisualData`. The MVP uses `YouTubeAutoCaptionCapture`. Phase two adds
+`WhisperCapture` and `VisualFrameCapture` implementing the same interfaces
+(`src/ingestion/capture_base.py`). Downstream code never changes.
+
+**Phase-two components are stubbed with full plans:** `whisper_capture.py`,
+`visual_capture.py`. Read their docstrings before implementing.
+
+**Enrichment is OFF by default** via `settings.enable_whisper` and
+`settings.enable_visual_extraction`. Only flip on post-funding. Apply enrichment
+surgically (top experts, chart-heavy content) — it's ~10x transcript-only cost.
+
+**Never retain downloaded media files** — extract data, then delete audio/video
+immediately (storage cost + copyright hygiene).

@@ -5,6 +5,54 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-05-28 — Visual + Whisper enrichment: design now, build later
+
+**Decision:** Add visual frame extraction and Whisper re-transcription as a
+PHASE-TWO capability. For the MVP, build only transcript-only ingestion using
+YouTube auto-captions. But make all schema and code changes now so phase two
+slots in without rebuilding.
+
+**Context:** Transcripts miss on-screen charts/data (the proof behind claims),
+and old auto-captions (pre-2021) are unreliable for numbers. Both problems are
+solved by downloading the video and processing it ourselves — Whisper for clean
+audio, vision AI for on-screen data.
+
+**Options considered:**
+- Build full visual + Whisper extraction into the MVP (too expensive: ~10x cost
+  per video, needs GPU infra, blocks fast MVP)
+- Ignore the issue entirely (loses the proof layer and mishandles old content)
+- Design the seams now, build the capability in phase two (chosen)
+
+**Choice:** Design-now-build-later, with a tiered rollout in phase two:
+- Tier 1 (MVP): transcript only, YouTube auto-captions, all content
+- Tier 2 (phase 2): + Whisper re-transcription for old/high-value content
+- Tier 3 (phase 2): + visual frame extraction for flagship chart-heavy content
+
+**Reasoning:** Most reasoning is spoken, so transcript-only proves the product
+cheaply. Visual extraction (~₹15-35/video) and Whisper (~₹10/video) are 10x the
+transcript-only cost, so they must be applied surgically and only after funding.
+Designing the seams now (schema fields, swappable capture interface, config
+flags) costs nothing today and avoids a painful migration later.
+
+**Changes made now (MVP) to accommodate phase two:**
+- Migration 002 adds: transcript_source, transcript_confidence, visual_data,
+  has_visual_extraction, enrichment_tier on content_pieces; new visual_evidence
+  table; supporting_visual_id + spoken_at_seconds on claims
+- New swappable capture abstraction: capture_types.py, capture_base.py
+- MVP capture refactored to implement the interface: youtube_capture.py
+- Phase-two stubs with full implementation plans: whisper_capture.py,
+  visual_capture.py
+- Config flags (all default OFF): enable_whisper, enable_visual_extraction,
+  tier-selection thresholds
+
+**What would change this:** If users in beta strongly signal that visual proof
+is essential for trust (not just nice-to-have), pull tier 3 forward. If costs
+come down significantly (cheaper vision models), the tiering thresholds loosen.
+
+**Revisit:** Post pre-seed funding, when there's budget for enrichment compute.
+
+---
+
 ## 2026-05-26 — Quality filter pass rate target
 
 **Decision:** Calibrate the quality filter to roughly 30–40% pass, 30% partial,

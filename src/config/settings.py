@@ -44,6 +44,14 @@ class Settings(BaseSettings):
 
     # --- External APIs ---
     youtube_api_key: str = Field(...)
+    youtube_proxy_url: str = Field(default="", description="Optional HTTP(S) proxy for YouTube transcript requests")
+    youtube_proxy_username: str = Field(default="", description="Optional Webshare-style proxy username")
+    youtube_proxy_password: str = Field(default="", description="Optional Webshare-style proxy password")
+    youtube_proxy_retries: int = Field(default=5, description="Retry count when YouTube blocks a transcript request")
+    youtube_request_delay_seconds: float = Field(
+        default=1.0,
+        description="Delay between transcript requests to reduce YouTube 429 throttling",
+    )
     alpha_vantage_key: str = Field(default="")
     fred_api_key: str = Field(default="")
 

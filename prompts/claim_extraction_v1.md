@@ -1,4 +1,4 @@
-# Prompt: claim_extraction_v1
+# Prompt: claim_extraction_v2
 
 > **Purpose:** Extract every distinct investment claim from a piece of expert
 > content and return structured JSON.
@@ -8,6 +8,7 @@
 > **Model:** Sonnet (bulk)
 >
 > **Version history:**
+>
 > - v1 (initial) — basic extraction with 8-field schema
 
 ---

@@ -15,17 +15,17 @@ from src.db.queries import insert_one, supabase
 # Replace handles with the actual YouTube handles you want to track.
 STARTING_EXPERTS = [
     # --- Indian YouTubers ---
-    {"name": "Ankur Warikoo", "handle": "@warikoo", "source_type": "youtube", "geography": "india"},
-    {"name": "Pranjal Kamra", "handle": "@pranjalkamra", "source_type": "youtube", "geography": "india"},
-    {"name": "CA Rachana Ranade", "handle": "@CARachanaRanade", "source_type": "youtube", "geography": "india"},
+    # {"name": "Ankur Warikoo", "handle": "@warikoo", "source_type": "youtube", "geography": "india"},
+    # {"name": "Pranjal Kamra", "handle": "@pranjalkamra", "source_type": "youtube", "geography": "india"},
+    # {"name": "CA Rachana Ranade", "handle": "@CARachanaRanade", "source_type": "youtube", "geography": "india"},
     {"name": "Akshat Shrivastava", "handle": "@AkshatZayn", "source_type": "youtube", "geography": "india"},
-    {"name": "Shankar Nath", "handle": "@shankarnath", "source_type": "youtube", "geography": "india"},
-    {"name": "Labour Law Advisor", "handle": "@LabourLawAdvisor", "source_type": "youtube", "geography": "india"},
-    {"name": "Nikhil Kamath", "handle": "@nikhilkamathcio", "source_type": "youtube", "geography": "india"},
+    # {"name": "Shankar Nath", "handle": "@shankarnath", "source_type": "youtube", "geography": "india"},
+    # {"name": "Labour Law Advisor", "handle": "@LabourLawAdvisor", "source_type": "youtube", "geography": "india"},
+    # {"name": "Nikhil Kamath", "handle": "@nikhilkamathcio", "source_type": "youtube", "geography": "india"},
     # --- US YouTubers ---
-    {"name": "Graham Stephan", "handle": "@GrahamStephan", "source_type": "youtube", "geography": "us"},
-    {"name": "Andrei Jikh", "handle": "@AndreiJikh", "source_type": "youtube", "geography": "us"},
-    {"name": "The Plain Bagel", "handle": "@ThePlainBagel", "source_type": "youtube", "geography": "us"},
+    # {"name": "Graham Stephan", "handle": "@GrahamStephan", "source_type": "youtube", "geography": "us"},
+    # {"name": "Andrei Jikh", "handle": "@AndreiJikh", "source_type": "youtube", "geography": "us"},
+    # {"name": "The Plain Bagel", "handle": "@ThePlainBagel", "source_type": "youtube", "geography": "us"},
 ]
 
 

@@ -14,15 +14,16 @@ environment. Follow in order.
 
 You need accounts on these services. Note your API keys as you create them:
 
-| Service | URL | What you need |
-|---|---|---|
-| Anthropic | https://console.anthropic.com | API key + add ~$20 credit |
-| OpenAI | https://platform.openai.com | API key + add ~$10 credit (embeddings only) |
-| Supabase | https://supabase.com | Free tier — create a new project, note URL + anon key + database URL |
-| Google Cloud | https://console.cloud.google.com | Enable "YouTube Data API v3", create API key |
-| GitHub | https://github.com | Free — for the repo and Actions |
+| Service      | URL                              | What you need                                                        |
+| ------------ | -------------------------------- | -------------------------------------------------------------------- |
+| Anthropic    | https://console.anthropic.com    | API key + add ~$20 credit                                            |
+| OpenAI       | https://platform.openai.com      | API key + add ~$10 credit (embeddings only)                          |
+| Supabase     | https://supabase.com             | Free tier — create a new project, note URL + anon key + database URL |
+| Google Cloud | https://console.cloud.google.com | Enable "YouTube Data API v3", create API key                         |
+| GitHub       | https://github.com               | Free — for the repo and Actions                                      |
 
 Optional but recommended:
+
 - **Railway** or **Render** — for hosting later (skip for now)
 - **Alpha Vantage** — free tier for US market data
 - **FRED** — free API for US macro data
@@ -112,7 +113,7 @@ Your first Claude Code prompt for tomorrow:
 
 > "Read the architecture document and CLAUDE.md. Then build
 > `src/extraction/extractor.py` — it should query unprocessed content_pieces,
-> call Claude with the claim_extraction_v1 prompt, parse the JSON response,
+> call Claude with the claim_extraction_v2 prompt, parse the JSON response,
 > and insert rows into the claims table. Include error handling for
 > malformed JSON responses and add a CLI entry point."
 

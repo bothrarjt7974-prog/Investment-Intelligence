@@ -28,7 +28,7 @@ def test_required_files_exist():
         "src/db/queries.py",
         "src/ingestion/youtube.py",
         "src/ingestion/run_all.py",
-        "prompts/claim_extraction_v1.md",
+        "prompts/claim_extraction_v2.md",
         "prompts/quality_filter_v1.md",
         "migrations/001_initial_schema.sql",
         "scripts/seed_experts.py",

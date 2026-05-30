@@ -14,14 +14,16 @@ from __future__ import annotations
 from datetime import datetime
 
 from loguru import logger
-from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
+    IpBlocked,
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     VideoUnavailable,
 )
 
 from src.ingestion.capture_base import TranscriptCapture
+from src.ingestion.youtube import make_transcript_api
 from src.ingestion.capture_types import (
     TranscriptResult,
     TranscriptSegment,
@@ -52,33 +54,37 @@ class YouTubeAutoCaptionCapture(TranscriptCapture):
     def capture(self, video_id: str) -> TranscriptResult | None:
         """Fetch auto-captions for a video. Returns None if unavailable."""
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            api = make_transcript_api()
 
             source = TranscriptSource.YOUTUBE_AUTO
             try:
-                transcript = transcript_list.find_manually_created_transcript(
-                    ["en", "en-US", "en-IN"]
-                )
+                entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
+                # If English captions exist, treat them as manual-generated when possible.
                 source = TranscriptSource.YOUTUBE_MANUAL
             except NoTranscriptFound:
-                try:
-                    transcript = transcript_list.find_transcript(
-                        ["en", "en-US", "en-IN"]
-                    )
-                except NoTranscriptFound:
-                    transcript = next(iter(transcript_list), None)
-                    if transcript is None:
-                        return None
+                entries = api.fetch(video_id)
 
-            entries = transcript.fetch()
-            segments = [
-                TranscriptSegment(
-                    text=e["text"],
-                    start_seconds=e["start"],
-                    duration_seconds=e.get("duration", 0.0),
+            segments = []
+            for e in entries:
+                text = getattr(e, "text", None)
+                if text is None and hasattr(e, "get"):
+                    text = e.get("text", "")
+
+                start_seconds = getattr(e, "start", None)
+                if start_seconds is None and hasattr(e, "get"):
+                    start_seconds = e.get("start", 0.0)
+
+                duration_seconds = getattr(e, "duration", None)
+                if duration_seconds is None and hasattr(e, "get"):
+                    duration_seconds = e.get("duration", 0.0)
+
+                segments.append(
+                    TranscriptSegment(
+                        text=text or "",
+                        start_seconds=start_seconds or 0.0,
+                        duration_seconds=duration_seconds or 0.0,
+                    )
                 )
-                for e in entries
-            ]
             full_text = " ".join(s.text for s in segments)
 
             # Manual captions are more reliable than auto regardless of age.
@@ -93,10 +99,10 @@ class YouTubeAutoCaptionCapture(TranscriptCapture):
                 source=source,
                 confidence=confidence,
                 segments=segments,
-                language=transcript.language_code,
+                language="en",
             )
 
-        except (TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
+        except (IpBlocked, RequestBlocked, TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
             logger.info(f"No transcript for {video_id}: {type(e).__name__}")
             return None
         except Exception as e:

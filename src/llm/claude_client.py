@@ -9,7 +9,7 @@ Usage:
     from src.llm.claude_client import claude
 
     response = claude.extract(
-        prompt_template="claim_extraction_v1",
+        prompt_template="claim_extraction_v2",
         content=transcript_text,
         variables={"expert_name": "Ankur Warikoo"},
     )
@@ -20,13 +20,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from anthropic import Anthropic
+from anthropic import Anthropic, BadRequestError
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.config.settings import settings
 
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+
+
+def should_retry_exception(exc: Exception) -> bool:
+    """Return whether a retry is appropriate for this Anthropic error."""
+    if isinstance(exc, BadRequestError):
+        message = str(exc).lower()
+        return not any(token in message for token in ("credit balance", "insufficient credits", "quota"))
+    return True
 
 
 class ClaudeClient:
@@ -58,6 +66,7 @@ class ClaudeClient:
         return template
 
     @retry(
+        retry=retry_if_exception(should_retry_exception),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=2, min=2, max=30),
         reraise=True,

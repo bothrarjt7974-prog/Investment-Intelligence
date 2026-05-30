@@ -47,6 +47,18 @@ def fetch_by_id(table: str, row_id: str) -> dict[str, Any] | None:
     return response.data[0] if response.data else None
 
 
+def fetch_unprocessed_content_pieces(limit: int = 100) -> list[dict[str, Any]]:
+    """Fetch unprocessed content pieces where processed_at is null."""
+    response = (
+        supabase.table("content_pieces")
+        .select("*")
+        .is_("processed_at", "null")
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []
+
+
 def fetch_where(
     table: str, filters: dict[str, Any], limit: int = 100
 ) -> list[dict[str, Any]]:

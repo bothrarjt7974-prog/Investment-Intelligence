@@ -39,7 +39,7 @@ the system.
 ### Layer 2 — Extraction (`src/extraction/`)
 
 - Reads unprocessed rows from `content_pieces` (where `processed_at` is null)
-- For each, calls Claude API with `claim_extraction_v1` prompt
+- For each, calls Claude API with `claim_extraction_v2` prompt
 - Parses returned JSON, validates against expected schema
 - Inserts rows into `claims` table with `quality_verdict = null`
 - Sets `processed_at` on the source content piece
@@ -77,14 +77,14 @@ the system.
 
 ## Key tables
 
-| Table | Purpose |
-|---|---|
-| `experts` | The people/channels we ingest from, with credibility scores |
-| `content_pieces` | Raw ingested content (transcripts, articles) |
-| `claims` | Structured extracted claims with quality verdicts and validation status |
-| `market_data` | Daily price/macro snapshots used for validation |
-| `briefings` | Generated morning intelligence outputs (one per day) |
-| `decision_influences` | Log of when the product influenced a real investment decision |
+| Table                 | Purpose                                                                 |
+| --------------------- | ----------------------------------------------------------------------- |
+| `experts`             | The people/channels we ingest from, with credibility scores             |
+| `content_pieces`      | Raw ingested content (transcripts, articles)                            |
+| `claims`              | Structured extracted claims with quality verdicts and validation status |
+| `market_data`         | Daily price/macro snapshots used for validation                         |
+| `briefings`           | Generated morning intelligence outputs (one per day)                    |
+| `decision_influences` | Log of when the product influenced a real investment decision           |
 
 ## What lives where
 

@@ -1,0 +1,1 @@
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS target_horizon_months INTEGER;

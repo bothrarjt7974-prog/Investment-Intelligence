@@ -12,17 +12,24 @@ Usage:
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Any
 
+import requests
 from googleapiclient.discovery import build
 from loguru import logger
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
+    IpBlocked,
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     VideoUnavailable,
 )
+from youtube_transcript_api.proxies import WebshareProxyConfig
 
 from src.config.settings import settings
 from src.db.queries import insert_one, supabase
@@ -31,6 +38,66 @@ from src.db.queries import insert_one, supabase
 def get_youtube_client() -> Any:
     """Return an authenticated YouTube Data API client."""
     return build("youtube", "v3", developerKey=settings.youtube_api_key)
+
+
+def make_transcript_api() -> YouTubeTranscriptApi:
+    """Build a transcript client that uses browser-like headers and retry handling."""
+    retries = max(1, settings.youtube_proxy_retries)
+    delay_seconds = max(0.0, float(settings.youtube_request_delay_seconds))
+
+    if delay_seconds > 0:
+        logger.debug(
+            f"Sleeping {delay_seconds:.2f}s before YouTube transcript request to reduce 429s"
+        )
+        time.sleep(delay_seconds)
+
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.youtube.com/",
+        }
+    )
+
+    retry_config = Retry(
+        total=retries,
+        backoff_factor=1.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST", "HEAD"],
+        respect_retry_after_header=True,
+    )
+    adapter = HTTPAdapter(max_retries=retry_config)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    if settings.youtube_proxy_username and settings.youtube_proxy_password:
+        logger.debug("Using Webshare proxy configuration for YouTube transcripts")
+        return YouTubeTranscriptApi(
+            proxy_config=WebshareProxyConfig(
+                proxy_username=settings.youtube_proxy_username,
+                proxy_password=settings.youtube_proxy_password,
+                retries_when_blocked=retries,
+            )
+        )
+
+    if settings.youtube_proxy_url:
+        logger.debug("Using generic proxy URL for YouTube transcripts")
+        session.proxies.update(
+            {
+                "http": settings.youtube_proxy_url,
+                "https": settings.youtube_proxy_url,
+            }
+        )
+
+        return YouTubeTranscriptApi(http_client=session)
+
+    return YouTubeTranscriptApi(http_client=session)
 
 
 def resolve_channel_id(handle: str) -> str | None:
@@ -110,21 +177,17 @@ def fetch_transcript(video_id: str) -> str | None:
     Returns None if no transcript is available.
     """
     try:
-        # Prefer English; fall back to first available
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        api = make_transcript_api()
 
         try:
-            transcript = transcript_list.find_transcript(["en", "en-US", "en-IN"])
+            entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
         except NoTranscriptFound:
-            transcript = next(iter(transcript_list), None)
-            if transcript is None:
-                return None
+            entries = api.fetch(video_id)
 
-        entries = transcript.fetch()
-        text = " ".join(entry["text"] for entry in entries)
+        text = " ".join(getattr(entry, "text", "") for entry in entries)
         return text
 
-    except (TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
+    except (IpBlocked, RequestBlocked, TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
         logger.info(f"No transcript for video {video_id}: {type(e).__name__}")
         return None
     except Exception as e:

@@ -74,3 +74,21 @@ def update_by_id(table: str, row_id: str, updates: dict[str, Any]) -> dict[str, 
     """Update a row by ID. Returns updated row."""
     response = supabase.table(table).update(updates).eq("id", row_id).execute()
     return response.data[0] if response.data else {}
+
+
+def fetch_unfiltered_claims(limit: int = 100) -> list[dict]:
+    """
+    Return claims that have not yet been quality-screened.
+
+    A claim is "unfiltered" when quality_verdict IS NULL.
+    Failed claims (quality_verdict = 'fail') are NOT re-screened.
+    """
+    response = (
+        supabase.table("claims")
+        .select("*")
+        .is_("quality_verdict", "null")
+        .order("created_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []

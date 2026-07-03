@@ -7,7 +7,7 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **Version history:**
+> **Version history:a**
 > - v1 (initial) — basic extraction with 8-field schema
 > - v2 — adds: canonical entity naming, stricter strength rules, currency-pair
 >        geography rule, target_horizon_months field, strategy-with-instrument

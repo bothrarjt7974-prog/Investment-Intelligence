@@ -23,12 +23,12 @@ from youtube_transcript_api._errors import (
 )
 
 from src.ingestion.capture_base import TranscriptCapture
-from src.ingestion.youtube import make_transcript_api
 from src.ingestion.capture_types import (
     TranscriptResult,
     TranscriptSegment,
     TranscriptSource,
 )
+from src.ingestion.youtube import make_transcript_api
 
 # Auto-captions before this year are notably less reliable (weaker speech
 # recognition). We lower their confidence so downstream extraction treats
@@ -56,13 +56,25 @@ class YouTubeAutoCaptionCapture(TranscriptCapture):
         try:
             api = make_transcript_api()
 
-            source = TranscriptSource.YOUTUBE_AUTO
             try:
                 entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
-                # If English captions exist, treat them as manual-generated when possible.
-                source = TranscriptSource.YOUTUBE_MANUAL
             except NoTranscriptFound:
                 entries = api.fetch(video_id)
+
+            # The library reports whether captions are creator-uploaded or
+            # speech-recognition auto-captions. Most English tracks on finance
+            # channels ARE auto-generated — labeling any successful English
+            # fetch as "manual" (as this code once did) inflated confidence
+            # to 0.85 on transcripts that deserve 0.50-0.70, which corrupts
+            # phase-two Whisper tier selection. Default to auto when the
+            # attribute is missing: under-claiming confidence is safe,
+            # over-claiming is not.
+            is_generated = getattr(entries, "is_generated", True)
+            source = (
+                TranscriptSource.YOUTUBE_AUTO
+                if is_generated
+                else TranscriptSource.YOUTUBE_MANUAL
+            )
 
             segments = []
             for e in entries:

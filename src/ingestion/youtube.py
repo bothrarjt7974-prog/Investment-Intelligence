@@ -22,13 +22,6 @@ from loguru import logger
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import (
-    IpBlocked,
-    NoTranscriptFound,
-    RequestBlocked,
-    TranscriptsDisabled,
-    VideoUnavailable,
-)
 from youtube_transcript_api.proxies import WebshareProxyConfig
 
 from src.config.settings import settings
@@ -171,30 +164,6 @@ def list_recent_videos(channel_id: str, max_results: int = 30) -> list[dict[str,
     return videos[:max_results]
 
 
-def fetch_transcript(video_id: str) -> str | None:
-    """
-    Fetch the transcript for a YouTube video as a single concatenated string.
-    Returns None if no transcript is available.
-    """
-    try:
-        api = make_transcript_api()
-
-        try:
-            entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
-        except NoTranscriptFound:
-            entries = api.fetch(video_id)
-
-        text = " ".join(getattr(entry, "text", "") for entry in entries)
-        return text
-
-    except (IpBlocked, RequestBlocked, TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
-        logger.info(f"No transcript for video {video_id}: {type(e).__name__}")
-        return None
-    except Exception as e:
-        logger.warning(f"Unexpected error fetching transcript for {video_id}: {e}")
-        return None
-
-
 def video_already_ingested(video_id: str) -> bool:
     """Check if a video is already in content_pieces."""
     url = f"https://youtube.com/watch?v={video_id}"
@@ -218,8 +187,6 @@ def ingest_video(expert_id: str, video: dict[str, Any]) -> dict[str, Any] | None
     WhisperCapture for high-value content by flipping settings.enable_whisper —
     this function does not need to change because both return TranscriptResult.
     """
-    from datetime import datetime
-
     from src.ingestion.youtube_capture import YouTubeAutoCaptionCapture
 
     video_id = video["video_id"]
@@ -298,7 +265,17 @@ def ingest_channel(
 
     ingested: list[dict[str, Any]] = []
     for video in videos:
-        result = ingest_video(expert_id, video)
+        # Per-video isolation, mirroring the per-expert isolation in
+        # run_all.py — one bad video (DB hiccup, malformed metadata) must not
+        # abort the rest of the channel's backlog.
+        try:
+            result = ingest_video(expert_id, video)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                f"Failed to ingest video {video.get('video_id')} "
+                f"({str(video.get('title'))[:60]}): {exc}"
+            )
+            continue
         if result:
             ingested.append(result)
 

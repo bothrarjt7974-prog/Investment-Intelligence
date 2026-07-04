@@ -26,7 +26,8 @@ verifiable source. The AI is a librarian and matchmaker, not an oracle.
    article scrape, audio transcription, structured API, manual/PDF), all
    producing source-agnostic `content_pieces` rows. YouTube pattern live.
 2. **Dual extraction** (`src/extraction/`) — TWO parallel Claude passes per
-   content piece: Track A claims (built, v3 prompt), Track B strategies
+   content piece: Track A claims (built, v2 prompt active; v3 drafted,
+   activates with Track B), Track B strategies
    (trigger/allocation/sizing/entry/exit schema — to build).
 3. **Normalization** (`src/extraction/normalization.py`) — deterministic
    post-processing: entity canonicalization, within-content dedup,
@@ -135,10 +136,14 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
 
 ## Current Status & MVP Scope
 
-- **Done:** Ingestion (YouTube), claim extraction v3, normalization (tested),
-  claim quality filter (v3 calibrating — the current gate)
+- **Done:** Ingestion (YouTube), claim extraction v2 (v3 drafted, activates
+  with Track B), normalization (tested), claim quality filter (v3
+  calibrating — the current gate), Track A outcome validation + credibility
+  scoring (built; market_data backfilled 2019→present, idle until claims
+  pass the quality filter)
 - **Next:** Finish filter calibration → full backlog screening → Phase B
-  (strategy extraction + expert_sources migration) → validation engine
+  (strategy extraction + expert_sources migration + claim_extraction_v3
+  activation) → Track B backtest engine
 - **MVP scope:** 1 expert fully processed (Akshat, ~750 pieces), then expand
   to 10 experts (7 Indian, 3 US); YouTube first, blogs/podcasts Phase H;
   India + US equities; founder as user zero, then 5-10 beta users

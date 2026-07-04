@@ -368,6 +368,26 @@ class TestFullPipeline:
         claimed_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
         assert normalize_claims([], claimed_at) == []
 
+    def test_pipeline_accepts_v3_claim_type_field(self):
+        # claim_extraction_v3 renames the output field "type" -> "claim_type"
+        # to match the DB column; the parser must accept both so prompt
+        # versions can switch without a lockstep code change.
+        raw = [{
+            "claim_text": "Nifty will rally 10% in 6 months",
+            "claim_type": "macro",
+            "geography": "india",
+            "timeframe": "short",
+            "strength": "strong",
+            "entity": "nifty50",
+            "direction": "bullish",
+            "reason_given": "Liquidity injection",
+            "target_horizon_months": 6,
+        }]
+        claimed_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        result = normalize_claims(raw, claimed_at)
+        assert len(result) == 1
+        assert result[0]["claim_type"] == "macro"
+
     def test_pipeline_preserves_all_required_db_fields(self):
         raw = [{
             "claim_text": "Test claim",

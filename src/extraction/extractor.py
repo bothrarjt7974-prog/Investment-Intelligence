@@ -10,7 +10,7 @@ from typing import Any
 import pendulum
 from loguru import logger
 
-from src.db.queries import fetch_by_id, fetch_unprocessed_content_pieces, insert_one, update_by_id
+from src.db.queries import fetch_by_id, fetch_unprocessed_content_pieces, insert_many, update_by_id
 from src.extraction.normalization import normalize_claims
 from src.llm.claude_client import claude
 
@@ -105,10 +105,14 @@ def extract_claims_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
         logger.warning(f"All claims filtered out by normalization for piece {piece.get('id')}")
         return []
 
-    # --- Step 4: Insert each cleaned claim ---
-    inserted_rows = []
-    for claim in clean_claims:
-        row = {
+    # --- Step 4: Insert all cleaned claims in one batch ---
+    # A single request is atomic on the PostgREST side: either every claim for
+    # this piece persists or none do. Inserting row-by-row left a window where
+    # a mid-loop crash (before processed_at was set) caused the retry to
+    # re-insert the claims that had already landed — duplicate rows with no
+    # dedup key to catch them.
+    rows = [
+        {
             "content_piece_id": piece["id"],
             "expert_id": expert_id,
             "claim_text": claim["claim_text"],
@@ -123,10 +127,9 @@ def extract_claims_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
             "target_date": claim["target_date"],
             "target_horizon_months": claim["target_horizon_months"],
         }
-        inserted = insert_one("claims", row)
-        inserted_rows.append(inserted)
-
-    return inserted_rows
+        for claim in clean_claims
+    ]
+    return insert_many("claims", rows)
 
 
 def run_extraction(max_pieces: int | None = None) -> int:
@@ -157,10 +160,18 @@ def run_extraction(max_pieces: int | None = None) -> int:
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception(f"Failed to process piece {piece_id}: {exc}")
+            # Set processed_at on failure too (tag, don't retry forever):
+            # leaving it NULL re-sent the same broken piece to Claude on every
+            # run — unbounded API cost for a piece that will keep failing.
+            # Failed pieces stay queryable via processing_error IS NOT NULL;
+            # clear both fields manually to requeue after a prompt/code fix.
             update_by_id(
                 "content_pieces",
                 piece_id,
-                {"processing_error": str(exc)},
+                {
+                    "processed_at": pendulum.now("UTC").to_iso8601_string(),
+                    "processing_error": str(exc),
+                },
             )
 
     return processed_count

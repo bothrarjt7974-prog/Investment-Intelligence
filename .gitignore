@@ -71,3 +71,7 @@ logs/
 # OS
 Thumbs.db
 desktop.ini
+
+# graphify (generated knowledge graph output)
+graphify-out/
+technical_execution_plan_v3.docx

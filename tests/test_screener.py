@@ -11,10 +11,10 @@ import pytest
 
 from src.quality.screener import (
     REQUIRED_DIMENSIONS,
+    derive_scope,
     derive_verdict_from_scores,
     parse_quality_response,
 )
-
 
 # =====================================================================
 # RESPONSE PARSING TESTS
@@ -137,7 +137,7 @@ class TestDeriveVerdict:
     """The rubric: pass = 3+ strong AND <= 1 weak; fail = 3+ weak; else partial."""
 
     def test_all_strong_is_pass(self):
-        scores = {dim: "strong" for dim in REQUIRED_DIMENSIONS}
+        scores = dict.fromkeys(REQUIRED_DIMENSIONS, "strong")
         assert derive_verdict_from_scores(scores) == "pass"
 
     def test_three_strong_one_weak_is_pass(self):
@@ -162,7 +162,7 @@ class TestDeriveVerdict:
         assert derive_verdict_from_scores(scores) == "partial"
 
     def test_all_weak_is_fail(self):
-        scores = {dim: "weak" for dim in REQUIRED_DIMENSIONS}
+        scores = dict.fromkeys(REQUIRED_DIMENSIONS, "weak")
         assert derive_verdict_from_scores(scores) == "fail"
 
     def test_three_weak_is_fail(self):
@@ -186,7 +186,7 @@ class TestDeriveVerdict:
         assert derive_verdict_from_scores(scores) == "partial"
 
     def test_all_partial_is_partial(self):
-        scores = {dim: "partial" for dim in REQUIRED_DIMENSIONS}
+        scores = dict.fromkeys(REQUIRED_DIMENSIONS, "partial")
         assert derive_verdict_from_scores(scores) == "partial"
 
     def test_two_strong_two_partial_one_weak_is_partial(self):
@@ -288,3 +288,26 @@ class TestEdgeCases:
         }"""
         result = parse_quality_response(raw)
         assert "₹" in result["justification"]
+
+
+# =====================================================================
+# HORIZON-BASED SCOPING (technical plan §7)
+# =====================================================================
+
+
+class TestDeriveScope:
+    def test_short_horizon_is_out_of_scope(self):
+        assert derive_scope(3) == "out_of_scope"
+        assert derive_scope(5) == "out_of_scope"
+
+    def test_boundary_six_months_is_in_scope(self):
+        assert derive_scope(6) == "in_scope"
+
+    def test_long_horizons_are_in_scope(self):
+        assert derive_scope(12) == "in_scope"
+        assert derive_scope(60) == "in_scope"
+
+    def test_null_horizon_stays_in_scope(self):
+        # Opinion-only claims are filtered by verification_status downstream,
+        # not by scope — no horizon must not mean "trading call".
+        assert derive_scope(None) == "in_scope"

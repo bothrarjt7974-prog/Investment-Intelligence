@@ -30,7 +30,14 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
 def should_retry_exception(exc: Exception) -> bool:
-    """Return whether a retry is appropriate for this Anthropic error."""
+    """
+    Return whether a retry is appropriate for this Anthropic error.
+
+    Known limitation: billing errors are detected by string matching on the
+    error message — brittle if Anthropic rewords it (worst case: 3 pointless
+    retries on an unrecoverable billing error, then the same failure). The
+    SDK does not expose a structured error code for this today.
+    """
     if isinstance(exc, BadRequestError):
         message = str(exc).lower()
         return not any(token in message for token in ("credit balance", "insufficient credits", "quota"))
@@ -116,8 +123,11 @@ class ClaudeClient:
         text_blocks = [block.text for block in message.content if hasattr(block, "text")]
         result = "\n".join(text_blocks)
 
-        logger.debug(
-            f"Claude response | prompt={prompt_name} "
+        # INFO, not DEBUG: cron logs run at INFO, and token counts are the
+        # only spend signal we have (no cost table at MVP) — burying them in
+        # DEBUG made API spend invisible in every scheduled run.
+        logger.info(
+            f"Claude usage | prompt={prompt_name} | model={model_to_use} "
             f"| input_tokens={message.usage.input_tokens} "
             f"| output_tokens={message.usage.output_tokens}"
         )

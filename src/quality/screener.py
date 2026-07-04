@@ -38,6 +38,29 @@ REQUIRED_DIMENSIONS = {
     "falsifiability",
 }
 
+# Horizon-based scoping (technical plan §7): claims resolving inside this
+# window are trading calls, not investment theses — marked out_of_scope for
+# guidance regardless of quality score. They still flow through validation
+# and count toward expert credibility.
+OUT_OF_SCOPE_HORIZON_MONTHS = 6
+
+
+def derive_scope(target_horizon_months: int | None) -> str:
+    """
+    Deterministic guidance-scope classification from the claim's horizon.
+
+    Code, not LLM — this is a hard product boundary (we are investors, not
+    traders), so it must be enforced mechanically, not judged per-claim.
+    None (no testable horizon) stays in_scope: opinion-only claims are
+    filtered by verification_status downstream, not by scope.
+    """
+    if (
+        target_horizon_months is not None
+        and target_horizon_months < OUT_OF_SCOPE_HORIZON_MONTHS
+    ):
+        return "out_of_scope"
+    return "in_scope"
+
 
 def parse_quality_response(raw_response: str) -> dict[str, Any]:
     """Parse Claude JSON output for a quality assessment and validate shape."""
@@ -133,7 +156,7 @@ def screen_one_claim(claim: dict[str, Any]) -> dict[str, Any] | None:
     # not as the trailing content. We pass an empty content string and
     # let the prompt template do the work via {{var}} substitution.
     response = claude.call(
-        prompt_name="quality_filter_v2",
+        prompt_name="quality_filter_v3",
         content="",
         variables=variables,
     )
@@ -159,6 +182,7 @@ def screen_one_claim(claim: dict[str, Any]) -> dict[str, Any] | None:
             "rubric_derived_verdict": derived,
         },
         "quality_filtered_at": pendulum.now("UTC").to_iso8601_string(),
+        "scope": derive_scope(claim.get("target_horizon_months")),
     }
 
     updated = update_by_id("claims", claim_id, update_fields)

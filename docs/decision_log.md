@@ -5,6 +5,127 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-04 — Horizon-based claim scoping: out_of_scope under 6 months
+
+**Decision:** Claims with target_horizon_months < 6 are tagged
+scope='out_of_scope' deterministically during quality screening (migration
+005, `derive_scope` in src/quality/screener.py). They still flow through
+validation and count toward expert credibility; guidance-facing layers
+(theme synthesis onward) filter on scope='in_scope'.
+
+**Context:** Technical plan v3 §7 requires it ("Short-horizon claims and
+trading strategies... are marked out_of_scope for guidance regardless of
+quality score"). The audit found no scope field existed anywhere.
+
+**Options considered:**
+- Tag in the extraction prompt (LLM) — violates "code does mechanics"
+- Tag in the screener as a deterministic post-step (chosen)
+- Defer to Phase B with strategy scoping — leaves trading calls eligible
+  for guidance in the meantime
+
+**Choice:** Deterministic tagging in the screener now; threshold 6 months
+per the plan. Claims with no horizon (null) stay in_scope — they resolve
+to opinion_only in validation and are filtered by verification_status.
+
+**What would change this:** If theme synthesis shows 6 months cuts off
+claims that feed valid 12-month theses, reconsider the boundary (the plan's
+long-horizon synthesis input is 12+ months anyway).
+
+**Revisit:** When Layer 5 (synthesis) is built.
+
+---
+
+## 2026-07-04 — Quality filter v3 wired into screener (was silently on v2)
+
+**Decision:** Point src/quality/screener.py at prompts/quality_filter_v3.md.
+
+**Context:** The layer-1-to-4 audit found the screener still hardcoded
+quality_filter_v2 while CLAUDE.md and the calibration work assumed v3 (the
+loosened counter_argument_acknowledgment rubric) was live. All calibration
+measurements taken before this date ran against v2.
+
+**Choice:** One-line prompt-name change; v3's variables and output schema
+are identical to v2 so no parser changes. Recalibrate on the standard
+20-claim sample immediately after and record the distribution here.
+
+**What would change this:** If v3's pass rate lands outside the 30-50%
+target band, iterate to v4 per prompts/README.md (never overwrite v3).
+
+**Recalibration result (2026-07-04, same 22-claim sample):**
+v2 baseline: 0 pass / 15 partial / 5 fail (2 unscreened).
+v3: 0 pass / 17 partial / 5 fail — 0% pass, target not met.
+Per-dimension diagnosis: counter_argument_acknowledgment still scored weak
+on 19/22 despite the v3 loosening, AND "strong" is scarce on every
+dimension (1-4 of 22). Root cause hypothesis: the filter only sees
+claim_text (one sentence) + reason_given (a 1-2 sentence summary) — too
+little material to ever score "strong" on reasoning_depth or data_support,
+regardless of rubric wording. A v4 likely needs richer input (verbatim
+expert reasoning or a transcript excerpt), not further rubric loosening.
+Sample caveat: 22 claims from very few videos; re-measure on a broader
+sample before concluding.
+
+**Revisit:** v4 design decision — pending founder review of the diagnosis.
+
+---
+
+## 2026-07-04 — Track A validation thresholds and credibility formula v1
+
+**Decision:** Ship Layer 4 Track A (claim outcome validation + credibility
+scoring) with these parameters:
+
+- Directional claims: correct if return exceeds ±2% in the predicted
+  direction; |return| ≤ 2% is partial regardless of direction; else incorrect.
+- Neutral claims: correct within ±5%, partial within ±10%, else incorrect.
+- Price targets: correct if the daily-close series ever touched the target
+  in the window; partial within 5% of target; else incorrect.
+- Credibility (src/internal/scoring.py, proprietary): outcome values
+  correct=1.0 / partial=0.5 / incorrect=0.0; strength weights strong=1.0 /
+  soft=0.5; recency decay 1.0 (<2y) / 0.5 (2-4y) / 0.25 (>4y); shrinkage
+  n/(n+20) toward a neutral 50; three horizon buckets (<12 / 12-36 / >36
+  months); overall = claim-count-weighted bucket average; sample_size_flag
+  below 20 validated claims.
+
+**Context:** Layer 4 build (2026-07-04). Free data only: yfinance for all
+price series, manual CSVs for RBI/Fed rates and CPI (FRED integration is a
+documented TODO — avoids blocking on an API key signup).
+
+**Reasoning:** The ±2% band separates a real directional call from noise
+over multi-month windows. Shrinkage at k=20 means a 5-for-5 streak scores
+~60, not 100 — no expert gets crowned on a small sample. Recency decay
+tracks that an expert's edge can fade; strength weighting makes confident
+wrongness cost more than hedged wrongness.
+
+**What would change this:** MFE/MAE are already stored per claim
+(unused) — scoring v2 can reward "right but early." Macro-indicator claims
+(rates, CPI) may deserve bands defined in level changes (bps) rather than
+percentage returns; revisit once enough macro claims validate.
+
+**Revisit:** After the first full backlog validation run.
+
+---
+
+## 2026-07-04 — v3 architecture adopted; structural migrations deferred to Phase B
+
+**Decision:** Adopt technical_execution_plan_v3 (multi-source expert_sources
+model, dual extraction claims + strategies) as the target architecture, but
+defer its structural migrations (expert_sources, strategies tables,
+claims_processed_at/strategies_processed_at split, source_quality_baseline
+prior, per-medium credibility) until Phase B, per the plan's own build
+sequence and the "do not expand scope until the current phase operates
+reliably" rule.
+
+**Context:** The v3 plan was written while Phase A (claim quality filter
+calibration) was still the gate. An audit on 2026-07-04 confirmed the code
+is a coherent v2-era implementation; claim_extraction_v3.md is drafted and
+activates together with strategy_extraction_v1 in Phase B.
+
+**What would change this:** Nothing expected — this is sequencing, not
+disagreement with v3.
+
+**Revisit:** Phase B kickoff.
+
+---
+
 ## 2026-05-28 — Visual + Whisper enrichment: design now, build later
 
 **Decision:** Add visual frame extraction and Whisper re-transcription as a

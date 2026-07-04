@@ -454,8 +454,15 @@ def _parse_claim(raw: dict[str, Any]) -> Claim | None:
     Convert one raw dict from Claude's JSON output to a Claim object.
     Returns None if the dict is missing required fields.
     """
-    required = ["claim_text", "type", "geography", "timeframe", "strength"]
+    # claim_extraction_v2 emits the category as "type"; v3 renames it to
+    # "claim_type" to match the DB column. Accept both so switching prompt
+    # versions never requires a lockstep code change.
+    raw_type = raw.get("claim_type", raw.get("type"))
+
+    required = ["claim_text", "geography", "timeframe", "strength"]
     missing = [f for f in required if f not in raw or raw[f] is None]
+    if raw_type is None:
+        missing.append("claim_type/type")
     if missing:
         logger.warning(f"Skipping claim missing fields {missing}: {raw}")
         return None
@@ -469,7 +476,7 @@ def _parse_claim(raw: dict[str, Any]) -> Claim | None:
 
     return Claim(
         claim_text=str(raw["claim_text"]).strip(),
-        claim_type=str(raw["type"]).strip().lower(),
+        claim_type=str(raw_type).strip().lower(),
         geography=str(raw["geography"]).strip().lower(),
         timeframe=str(raw["timeframe"]).strip().lower(),
         strength=str(raw["strength"]).strip().lower(),

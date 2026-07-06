@@ -5,6 +5,51 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-04 — "Quality-passed" redefined to include partial verdicts
+
+**Decision:** Downstream layers (starting with validation's
+`fetch_validatable_claims`) now select claims where
+`quality_verdict IN ('pass', 'partial')`, not `= 'pass'` alone. `fail`
+remains the only excluded verdict. Updated in `src/db/queries.py`,
+`src/quality/screener.py` docstring, and `CLAUDE.md`.
+
+**Context:** The v3 recalibration (same-day entry above) confirmed on 157
+real claims that `quality_verdict='pass'` clears at ~1.6% (2 of 122
+screened) — the filter's own diagnosis is that `claim_text` +
+`reason_given` never contain enough material to score "strong" on any
+dimension, not that the claims themselves are low-quality. Gating
+everything downstream on `pass` alone would starve validation,
+credibility scoring, and eventually synthesis of claims indefinitely
+while a v4 extraction fix (richer reasoning capture) is designed and
+tested.
+
+**Options considered:**
+- Build a v4 extraction prompt (richer `reason_given`), test on a small
+  batch, re-measure before touching the gate (more rigorous, but leaves
+  every downstream layer starved in the meantime)
+- Manually review a sample of partial/fail claims first to sanity-check
+  the diagnosis (free, but still leaves the gate closed while reviewing)
+- Promote `partial` to usable now (chosen) — unblocks validation and
+  credibility scoring immediately using the 95 partial-verdict claims
+  already in hand
+
+**Choice:** Promote `partial` to usable now.
+
+**Reasoning:** `partial` claims still passed the rubric's baseline (not
+3+ weak) — they have *some* reasoning, just not exhaustively demonstrated
+given the compressed input. Excluding them entirely was rejecting claims
+for a filter-input limitation, not a claim-quality problem. `fail` (3+
+weak dimensions) is a meaningfully different bar and stays excluded.
+
+**What would change this:** If a v4 extraction prompt (richer verbatim
+reasoning) later gets `pass` alone above the original 30-50% target on a
+real sample, tighten back to `pass` only — this is a stopgap for the
+current filter-input limitation, not a permanent rubric philosophy.
+
+**Revisit:** When/if a v4 extraction prompt is built and re-measured.
+
+---
+
 ## 2026-07-04 — Horizon-based claim scoping: out_of_scope under 6 months
 
 **Decision:** Claims with target_horizon_months < 6 are tagged

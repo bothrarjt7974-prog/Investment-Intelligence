@@ -120,7 +120,9 @@ ruff check src/                           # linting
 - Never auto-generate prompts — they require careful crafting and testing
 - Never train on user data
 - Never store claims/strategies that failed quality filter as if they passed
-  (tag, don't delete; downstream queries filter on quality_verdict = 'pass')
+  (tag, don't delete; downstream queries filter on quality_verdict IN
+  ('pass', 'partial') — see 2026-07-04 decision log, 'fail' is the only
+  excluded verdict)
 - Never commit `.env` or any file containing API keys
 - Never retain downloaded media files — extract, then delete immediately
 

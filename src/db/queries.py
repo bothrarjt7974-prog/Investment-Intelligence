@@ -123,6 +123,16 @@ def upsert_many(
     return response.data or []
 
 
+def symbol_has_market_data(symbol: str) -> bool:
+    """True if `symbol` has at least one row in market_data — used to decide
+    whether an on-demand single-symbol backfill is needed before validating
+    a fallback-resolved entity (one never covered by the bulk backfill)."""
+    response = (
+        supabase.table("market_data").select("id").eq("symbol", symbol).limit(1).execute()
+    )
+    return bool(response.data)
+
+
 def fetch_latest_market_price(
     symbol: str, on_or_before: str, earliest: str
 ) -> dict[str, Any] | None:
@@ -156,14 +166,18 @@ def fetch_market_price_series(symbol: str, start: str, end: str) -> list[dict[st
 
 def fetch_validatable_claims(limit: int = 100) -> list[dict[str, Any]]:
     """
-    Return claims ready for outcome validation: quality-passed, not yet
-    validated, and whose target_date has already passed.
+    Return claims ready for outcome validation: quality-passed (pass OR
+    partial — see 2026-07-04 decision log entry), not yet validated, and
+    whose target_date has already passed.
+
+    'fail' is the only verdict excluded from validation; it never had
+    enough reasoning to be worth checking against outcomes.
     """
     today = pendulum.now("UTC").to_date_string()
     response = (
         supabase.table("claims")
         .select("*")
-        .eq("quality_verdict", "pass")
+        .in_("quality_verdict", ["pass", "partial"])
         .or_("verification_status.is.null,verification_status.eq.pending")
         .lt("target_date", today)
         .order("target_date", desc=False)

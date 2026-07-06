@@ -27,6 +27,7 @@ from loguru import logger
 from src.db.queries import (
     fetch_latest_market_price,
     fetch_market_price_series,
+    symbol_has_market_data,
     upsert_many,
 )
 from src.validation.entity_symbol_map import ENTITY_SYMBOL_MAP
@@ -126,6 +127,40 @@ def backfill_symbol(
         return written, None
     except Exception as exc:  # noqa: BLE001
         return 0, str(exc)
+
+
+def ensure_symbol_backfilled(
+    symbol: str, fetch_symbol: str, start_date: str = "2019-01-01"
+) -> bool:
+    """
+    On-demand single-symbol backfill for entities resolved via
+    entity_symbol_map's geography fallback (e.g. a ticker not explicitly in
+    ENTITY_SYMBOL_MAP, appended with .NS) — these are skipped by the bulk
+    backfill_all() loop, which only iterates the explicit map, so without
+    this they resolve a valid-looking symbol and then silently have no
+    price data to validate against.
+
+    No-ops (cheap) if the symbol already has rows. Returns True if data is
+    available after this call — either it already was, or the on-demand
+    fetch found real history. False means yfinance genuinely has nothing
+    for this ticker (wrong/delisted/renamed — the caller should still fall
+    back to data_unavailable, and the "no data returned" log is exactly the
+    signal that this entity needs a curated map correction, as ZOMATO.NS
+    and TATAMOTORS.NS did).
+    """
+    if symbol_has_market_data(symbol):
+        return True
+
+    logger.info(f"'{symbol}' has no market_data yet — on-demand backfill from {fetch_symbol}")
+    written, error = backfill_symbol(symbol, fetch_symbol, start_date)
+    if error:
+        logger.warning(
+            f"On-demand backfill failed for '{symbol}' ({fetch_symbol}): {error}. "
+            f"If this ticker is real, verify it manually; if renamed/delisted, "
+            f"add a corrected explicit entry to ENTITY_SYMBOL_MAP."
+        )
+        return False
+    return written > 0
 
 
 def backfill_all(

@@ -24,7 +24,7 @@ from loguru import logger
 from src.db.queries import fetch_validatable_claims, update_by_id
 from src.internal.scoring import recompute_all_experts
 from src.validation.entity_symbol_map import resolve_entity
-from src.validation.market_data import price_on, price_series
+from src.validation.market_data import ensure_symbol_backfilled, price_on, price_series
 
 DEFAULT_LOOKBACK_DAYS = 7
 # Manual macro series (repo rate, CPI) only get a new row when the value
@@ -216,12 +216,21 @@ def validate_one_claim(claim: dict[str, Any]) -> dict[str, Any] | None:
     # fetch_symbol='^NSEI') — resolve_entity is only consulted here to
     # confirm the entity is mappable at all.
     symbol = entity
-    _, source = resolved
+    fetch_symbol, source = resolved
     # Manual macro series (repo rate, CPI) only get a new row every 1-3
     # months, unlike daily market data — a 7-day lookback would miss the
     # last known value for most claim/target dates. MANUAL_LOOKBACK_DAYS
     # covers the widest realistic gap (RBI repo rate changes) with margin.
     lookback_days = MANUAL_LOOKBACK_DAYS if source == "manual" else DEFAULT_LOOKBACK_DAYS
+
+    # On-demand backfill for entities not covered by the bulk backfill —
+    # either a new explicit map entry, or (most often) the geography-based
+    # .NS/bare-ticker fallback in resolve_entity(). No-ops if data already
+    # exists. Manual-source entities come from CSVs, not yfinance — nothing
+    # to backfill on demand for those.
+    if source == "yfinance" and not ensure_symbol_backfilled(symbol, fetch_symbol):
+        logger.info(f"Claim {claim_id}: no market data available for '{symbol}' ({fetch_symbol})")
+        return {"verification_status": "data_unavailable", "verified_at": now}
 
     claimed_at_str = _to_date_str(claimed_at)
     target_date_str = _to_date_str(target_date)

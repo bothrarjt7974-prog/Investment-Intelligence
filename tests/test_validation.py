@@ -3,7 +3,8 @@ Tests for the validation layer: entity resolution, claim outcome
 validation, and credibility scoring.
 
 All market data is mocked (monkeypatch price_on / price_series /
-fetch_latest_market_price) — no network calls in this test module.
+fetch_latest_market_price / ensure_symbol_backfilled) — no network or
+Supabase calls in this test module.
 """
 
 from __future__ import annotations
@@ -46,6 +47,9 @@ def _mock_prices(monkeypatch, price_at_claim, price_at_target, series=None):
 
     monkeypatch.setattr(validator, "price_on", fake_price_on)
     monkeypatch.setattr(validator, "price_series", fake_price_series)
+    # Default: pretend every symbol is already backfilled, so tests don't
+    # silently hit the real Supabase/yfinance on-demand path.
+    monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: True)
 
 
 # =====================================================================
@@ -204,6 +208,7 @@ class TestNonTestableClaims:
             return None
 
         monkeypatch.setattr(validator, "price_on", fake_price_on)
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: True)
         result = validator.validate_one_claim(make_claim())
         assert result["verification_status"] == "data_unavailable"
 
@@ -227,6 +232,7 @@ class TestNonTestableClaims:
 
         monkeypatch.setattr(validator, "price_on", fake_price_on)
         monkeypatch.setattr(validator, "price_series", fake_price_series)
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: True)
 
         result = validator.validate_one_claim(
             make_claim(entity="nifty50", geography="india", direction="bullish")
@@ -256,6 +262,70 @@ class TestResolveEntity:
 
     def test_none_entity_returns_none(self):
         assert resolve_entity(None, "us") is None
+
+
+# =====================================================================
+# On-demand backfill (src/validation/market_data.ensure_symbol_backfilled)
+#
+# Regression coverage: a fallback-resolved entity (e.g. 'INDIGO' -> 'INDIGO.NS')
+# is never touched by backfill_all()'s bulk loop, which only iterates
+# ENTITY_SYMBOL_MAP — without this on-demand path such a claim would resolve
+# a valid-looking ticker and then find zero market_data rows forever.
+# =====================================================================
+
+
+class TestEnsureSymbolBackfilled:
+    def test_noop_when_data_already_exists(self, monkeypatch):
+        monkeypatch.setattr(market_data, "symbol_has_market_data", lambda symbol: True)
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("backfill_symbol should not be called when data exists")
+
+        monkeypatch.setattr(market_data, "backfill_symbol", fail_if_called)
+
+        assert market_data.ensure_symbol_backfilled("AAPL", "AAPL") is True
+
+    def test_fetches_when_missing_and_succeeds(self, monkeypatch):
+        monkeypatch.setattr(market_data, "symbol_has_market_data", lambda symbol: False)
+        monkeypatch.setattr(
+            market_data, "backfill_symbol", lambda symbol, fetch_symbol, start_date: (500, None)
+        )
+
+        assert market_data.ensure_symbol_backfilled("INDIGO", "INDIGO.NS") is True
+
+    def test_returns_false_for_genuinely_bad_ticker(self, monkeypatch):
+        # A renamed/delisted ticker (like ZOMATO.NS or TATAMOTORS.NS were)
+        # yfinance returns nothing for — this must not be treated as success.
+        monkeypatch.setattr(market_data, "symbol_has_market_data", lambda symbol: False)
+        monkeypatch.setattr(
+            market_data,
+            "backfill_symbol",
+            lambda symbol, fetch_symbol, start_date: (0, "no data returned"),
+        )
+
+        assert market_data.ensure_symbol_backfilled("DELISTEDCO", "DELISTEDCO.NS") is False
+
+    def test_manual_source_claims_never_trigger_backfill(self, monkeypatch):
+        # Manual macro entities (rbi_rate, etc.) come from CSVs, not yfinance —
+        # validate_one_claim must skip ensure_symbol_backfilled for source='manual'.
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("ensure_symbol_backfilled should not run for manual source")
+
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", fail_if_called)
+        monkeypatch.setattr(validator, "price_on", lambda symbol, d, max_lookback_days=7: None)
+
+        result = validator.validate_one_claim(
+            make_claim(entity="rbi_rate", geography="india", direction="bearish")
+        )
+        assert result["verification_status"] == "data_unavailable"
+
+    def test_data_unavailable_when_on_demand_backfill_fails(self, monkeypatch):
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: False)
+
+        result = validator.validate_one_claim(
+            make_claim(entity="INDIGO", geography="india", direction="bullish")
+        )
+        assert result["verification_status"] == "data_unavailable"
 
 
 # =====================================================================

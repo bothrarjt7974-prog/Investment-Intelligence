@@ -6,8 +6,11 @@ Sends each claim through the quality_filter prompt and records:
   - quality_filtered_at (timestamp)
 
 Failed claims are NOT deleted; they are tagged. Downstream layers
-(convergence, briefing) filter by quality_verdict = 'pass' when they
-want clean data.
+(validation, convergence, briefing) filter by quality_verdict IN
+('pass', 'partial') when they want usable data — 'fail' is the only
+excluded verdict (2026-07-04 decision: v3's pass rate on real data never
+cleared ~2%, so 'partial' was promoted to usable rather than starving
+every downstream layer of claims; see decision log for the diagnosis).
 
 Architectural notes:
   - Follows the same pattern as src/extraction/extractor.py

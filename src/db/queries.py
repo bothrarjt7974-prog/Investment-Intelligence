@@ -205,3 +205,59 @@ def fetch_active_expert_ids() -> list[str]:
     """Return ids of all experts, for the end-of-batch credibility recompute."""
     response = supabase.table("experts").select("id").execute()
     return [row["id"] for row in (response.data or [])]
+
+
+def fetch_unprocessed_content_pieces_for_strategies(limit: int = 100) -> list[dict[str, Any]]:
+    """
+    Fetch content pieces not yet run through Track B (strategy extraction),
+    where strategies_processed_at is null.
+
+    Independent cursor from fetch_unprocessed_content_pieces (Track A) —
+    the two tracks run as separate passes over the same table and must not
+    share processed-state columns. Same oldest-first ordering rationale
+    (backfill imperative, technical plan §8).
+    """
+    response = (
+        supabase.table("content_pieces")
+        .select("*")
+        .is_("strategies_processed_at", "null")
+        .order("published_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_claims_by_content_piece(content_piece_id: str) -> list[dict[str, Any]]:
+    """
+    Return {id, entity} for every claim extracted from one content piece —
+    used to resolve a strategy's linked_claim_entity (an entity name from
+    the LLM) into actual claim UUIDs. Code does this match, not the LLM,
+    since the LLM has no visibility into already-persisted claim rows.
+    """
+    response = (
+        supabase.table("claims")
+        .select("id,entity")
+        .eq("content_piece_id", content_piece_id)
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_unfiltered_strategies(limit: int = 100) -> list[dict[str, Any]]:
+    """
+    Return strategies that have not yet been quality-screened (Filter B).
+
+    A strategy is "unfiltered" when quality_verdict IS NULL. Failed
+    strategies (quality_verdict = 'fail') are NOT re-screened, mirroring
+    fetch_unfiltered_claims.
+    """
+    response = (
+        supabase.table("strategies")
+        .select("*")
+        .is_("quality_verdict", "null")
+        .order("created_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []

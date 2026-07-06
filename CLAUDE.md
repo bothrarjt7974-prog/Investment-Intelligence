@@ -26,15 +26,18 @@ verifiable source. The AI is a librarian and matchmaker, not an oracle.
    article scrape, audio transcription, structured API, manual/PDF), all
    producing source-agnostic `content_pieces` rows. YouTube pattern live.
 2. **Dual extraction** (`src/extraction/`) — TWO parallel Claude passes per
-   content piece: Track A claims (built, v2 prompt active; v3 drafted,
-   activates with Track B), Track B strategies
-   (trigger/allocation/sizing/entry/exit schema — to build).
+   content piece: Track A claims (built, v3 prompt active as of Phase B
+   kickoff, not yet recalibrated against real output), Track B strategies
+   (trigger/allocation/sizing/entry/exit schema — built, `strategy_extraction_v1`
+   not yet calibrated against real output).
 3. **Normalization** (`src/extraction/normalization.py`) — deterministic
    post-processing: entity canonicalization, within-content dedup,
-   target_date computation. Built, 30 passing tests. Code, never LLM.
+   target_date computation (claims); entity_class canonicalization,
+   within-content dedup (strategies). Code, never LLM.
 4. **Quality filters** (`src/quality/`) — Filter A scores claims on 5
    reasoning dimensions (built, v3 calibrating). Filter B scores strategies
-   on 5 specificity dimensions (to build). Rejects aggressively.
+   on 5 specificity dimensions (built, `quality_filter_strategy_v1` not yet
+   calibrated). Rejects aggressively.
 5. **Validation** (`src/validation/`) — Track A: outcome validation of claims
    against market data when target dates pass. Track B: strategy backtesting
    via trigger vocabulary. Credibility scored per expert, per horizon
@@ -138,14 +141,21 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
 
 ## Current Status & MVP Scope
 
-- **Done:** Ingestion (YouTube), claim extraction v2 (v3 drafted, activates
-  with Track B), normalization (tested), claim quality filter (v3
-  calibrating — the current gate), Track A outcome validation + credibility
-  scoring (built; market_data backfilled 2019→present, idle until claims
-  pass the quality filter)
-- **Next:** Finish filter calibration → full backlog screening → Phase B
-  (strategy extraction + expert_sources migration + claim_extraction_v3
-  activation) → Track B backtest engine
+- **Done:** Ingestion (YouTube), claim extraction v3 active (2026-07-06,
+  Phase B kickoff), strategy extraction built (Track B —
+  `strategy_extraction_v1`, migration 006), normalization (claims tested,
+  strategies built), claim quality filter (v3 calibrating — the current
+  gate for claims), strategy quality filter built (Filter B, not yet
+  calibrated), Track A outcome validation + credibility scoring (built;
+  market_data backfilled 2019→present, idle until claims pass the quality
+  filter)
+- **Deferred:** expert_sources multi-source migration — pushed to Phase H
+  kickoff (when a second ingestion pattern actually activates); see
+  2026-07-06 decision log entry
+- **Next:** Calibrate `strategy_extraction_v1` and `quality_filter_strategy_v1`
+  on a real held-out sample; re-measure `claim_extraction_v3` against v2;
+  finish claim filter calibration → full backlog screening (both tracks) →
+  Track B backtest engine
 - **MVP scope:** 1 expert fully processed (Akshat, ~750 pieces), then expand
   to 10 experts (7 Indian, 3 US); YouTube first, blogs/podcasts Phase H;
   India + US equities; founder as user zero, then 5-10 beta users

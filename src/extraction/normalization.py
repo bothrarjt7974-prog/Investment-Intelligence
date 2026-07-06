@@ -563,3 +563,244 @@ def normalize_claims(
     )
 
     return result
+
+
+# =====================================================================
+# STRATEGY NORMALIZATION (Track B)
+# =====================================================================
+# Mirrors the claims pipeline above but kept self-contained (own dataclass,
+# own dedup) rather than sharing code with it — the grouping key and
+# required fields differ (entity_class vs entity, strategy_text vs
+# claim_text, no timeframe/target_date computation for strategies).
+#
+# entity_class reuses normalize_entity() directly: the same canonical
+# naming rules apply to a strategy's applicable sector/asset-class/
+# instrument as to a claim's entity (technical_execution_plan_v3 §6).
+# =====================================================================
+
+STRATEGY_SIMILARITY_THRESHOLD = 0.50
+
+
+@dataclass
+class Strategy:
+    """In-memory strategy representation matching the prompt's JSON output."""
+
+    strategy_text: str
+    strategy_type: str
+    trigger_conditions: dict[str, Any] | None = None
+    entity_class: str | None = None
+    allocation_rule: str | None = None
+    position_sizing: str | None = None
+    entry_methodology: str | None = None
+    holding_horizon_months: int | None = None
+    exit_conditions: str | None = None
+    risk_framework: str | None = None
+    reason_given: str = ""
+    linked_claim_entity: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+def _parse_strategy(raw: dict[str, Any]) -> Strategy | None:
+    """
+    Convert one raw dict from Claude's strategy JSON output to a Strategy
+    object. Returns None if required fields are missing.
+    """
+    required = ["strategy_text", "strategy_type"]
+    missing = [f for f in required if f not in raw or not raw[f]]
+    if missing:
+        logger.warning(f"Skipping strategy missing fields {missing}: {raw}")
+        return None
+
+    horizon = raw.get("holding_horizon_months")
+    if horizon is not None:
+        try:
+            horizon = int(horizon)
+        except (TypeError, ValueError):
+            horizon = None
+        else:
+            if horizon <= 0:
+                logger.warning(
+                    f"Dropping non-positive holding_horizon_months={horizon}: {raw}"
+                )
+                horizon = None
+
+    return Strategy(
+        strategy_text=str(raw["strategy_text"]).strip(),
+        strategy_type=str(raw["strategy_type"]).strip().lower(),
+        trigger_conditions=raw.get("trigger_conditions"),
+        entity_class=normalize_entity(raw.get("entity_class")),
+        allocation_rule=raw.get("allocation_rule"),
+        position_sizing=raw.get("position_sizing"),
+        entry_methodology=raw.get("entry_methodology"),
+        holding_horizon_months=horizon,
+        exit_conditions=raw.get("exit_conditions"),
+        risk_framework=raw.get("risk_framework"),
+        reason_given=str(raw.get("reason_given", "")).strip(),
+        linked_claim_entity=normalize_entity(raw.get("linked_claim_entity")),
+        raw=raw,
+    )
+
+
+def _strategy_similarity(a: Strategy, b: Strategy) -> float:
+    """Same three-signal approach as _claim_similarity, applied to strategy_text."""
+    words_a = _important_words(a.strategy_text)
+    words_b = _important_words(b.strategy_text)
+
+    if not words_a or not words_b:
+        return 0.0
+
+    intersection = words_a & words_b
+    union = words_a | words_b
+    jaccard = len(intersection) / len(union)
+
+    smaller = min(len(words_a), len(words_b))
+    containment = len(intersection) / smaller if smaller > 0 else 0.0
+
+    seq = SequenceMatcher(None, a.strategy_text.lower(), b.strategy_text.lower()).ratio()
+
+    same_entity_bonus = 0.0
+    if (
+        a.entity_class is not None
+        and b.entity_class is not None
+        and a.entity_class == b.entity_class
+    ):
+        same_entity_bonus = 0.15
+
+    score = 0.4 * jaccard + 0.4 * containment + 0.2 * seq + same_entity_bonus
+    return min(score, 1.0)
+
+
+def _pick_best_strategy(strategies: list[Strategy]) -> Strategy:
+    """
+    From a group of similar strategies, keep the most complete one:
+    more populated fields first, then longer strategy_text.
+    """
+    def score(s: Strategy) -> tuple[int, int]:
+        populated = sum(
+            1
+            for v in (
+                s.trigger_conditions,
+                s.allocation_rule,
+                s.position_sizing,
+                s.entry_methodology,
+                s.holding_horizon_months,
+                s.exit_conditions,
+                s.risk_framework,
+            )
+            if v
+        )
+        return (populated, len(s.strategy_text))
+
+    return max(strategies, key=score)
+
+
+def deduplicate_strategies_within_video(strategies: list[Strategy]) -> list[Strategy]:
+    """
+    Remove duplicate strategies within a single content piece's extraction
+    batch. Same grouping + clustering algorithm as deduplicate_within_video,
+    grouped by entity_class instead of entity.
+    """
+    if len(strategies) <= 1:
+        return strategies
+
+    groups: dict[str | None, list[Strategy]] = {}
+    for s in strategies:
+        groups.setdefault(s.entity_class, []).append(s)
+
+    kept: list[Strategy] = []
+    removed_count = 0
+
+    for entity_class, group in groups.items():
+        if len(group) == 1:
+            kept.append(group[0])
+            continue
+
+        clusters: list[list[Strategy]] = []
+        assigned: set[int] = set()
+
+        for i, strategy in enumerate(group):
+            if i in assigned:
+                continue
+            cluster = [strategy]
+            assigned.add(i)
+            for j in range(i + 1, len(group)):
+                if j in assigned:
+                    continue
+                if _strategy_similarity(strategy, group[j]) >= STRATEGY_SIMILARITY_THRESHOLD:
+                    cluster.append(group[j])
+                    assigned.add(j)
+            clusters.append(cluster)
+
+        for cluster in clusters:
+            best = _pick_best_strategy(cluster)
+            if len(cluster) > 1:
+                removed_count += len(cluster) - 1
+                logger.debug(
+                    f"Merged {len(cluster)} similar strategies (entity_class={entity_class}); "
+                    f"kept len={len(best.strategy_text)}"
+                )
+            kept.append(best)
+
+    if removed_count > 0:
+        logger.info(
+            f"Strategy dedup: {len(strategies)} → {len(kept)} strategies "
+            f"({removed_count} duplicates removed)"
+        )
+
+    return kept
+
+
+def normalize_strategies(raw_strategies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Full normalization pipeline for Track B (strategy) extraction output.
+
+    Input: list of raw strategy dicts from Claude's JSON response.
+    Output: list of cleaned dicts ready to insert into the strategies table.
+
+    Pipeline:
+      1. Parse each raw dict → Strategy object (drops malformed entries,
+         normalizes entity_class/linked_claim_entity via normalize_entity)
+      2. Deduplicate within the content piece
+      3. Emit DB-ready dicts
+
+    linked_claim_entity is passed through as a canonical entity name, not
+    resolved to an actual claim UUID here — that requires a DB lookup
+    against this content piece's already-persisted claims, which this
+    (DB-free) module doesn't perform. strategy_extractor.py resolves it.
+    """
+    parsed: list[Strategy] = []
+    for raw in raw_strategies:
+        strategy = _parse_strategy(raw)
+        if strategy is not None:
+            parsed.append(strategy)
+
+    if not parsed:
+        return []
+
+    initial_count = len(parsed)
+    deduped = deduplicate_strategies_within_video(parsed)
+
+    result: list[dict[str, Any]] = [
+        {
+            "strategy_text": s.strategy_text,
+            "strategy_type": s.strategy_type,
+            "trigger_conditions": s.trigger_conditions,
+            "entity_class": s.entity_class,
+            "allocation_rule": s.allocation_rule,
+            "position_sizing": s.position_sizing,
+            "entry_methodology": s.entry_methodology,
+            "holding_horizon_months": s.holding_horizon_months,
+            "exit_conditions": s.exit_conditions,
+            "risk_framework": s.risk_framework,
+            "reason_given": s.reason_given,
+            "linked_claim_entity": s.linked_claim_entity,
+        }
+        for s in deduped
+    ]
+
+    logger.info(
+        f"Strategy normalization: {len(raw_strategies)} raw → {initial_count} parsed → "
+        f"{len(result)} after dedup"
+    )
+
+    return result

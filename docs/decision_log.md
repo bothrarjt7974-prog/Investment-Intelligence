@@ -5,6 +5,68 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-06 — Phase B kickoff: Track B strategy extraction built; expert_sources deferred to Phase H
+
+**Decision:** Build Track B (strategy extraction) per `technical_execution_plan_v3.docx`
+§5: new `strategies` table (migration 006), `prompts/strategy_extraction_v1.md`,
+`src/extraction/strategy_extractor.py`, `normalize_strategies()` in
+`src/extraction/normalization.py`, Filter B (`prompts/quality_filter_strategy_v1.md`
++ `src/quality/strategy_screener.py`). Also activate `claim_extraction_v3` in
+`src/extraction/extractor.py` in the same change, per that prompt's own header
+instruction ("activate in the same change as strategy_extraction_v1").
+
+**What was explicitly deferred:** The v3 plan bundles a second migration into
+Phase B — the `expert_sources` multi-source model (renaming
+`content_pieces.expert_id`, splitting `processed_at` into
+`claims_processed_at`/`strategies_processed_at` at the expert_sources level).
+That refactor is NOT done. Instead, Track B's own processing cursor
+(`strategies_processed_at`/`strategies_processing_error`) was added directly
+to `content_pieces`, independent of the expert_sources model.
+
+**Context:** The project is still single-expert (Akshat), single-source
+(YouTube only) — Pattern 2/3 (blogs, podcasts) don't activate until Phase H.
+The expert_sources refactor's entire benefit (per-medium credibility,
+multi-source ingestion) doesn't exist until a second source type is added.
+Renaming a column on a live table and touching working ingestion code
+(`src/ingestion/youtube.py`, `src/ingestion/run_all.py`) and the Track A
+extractor for a benefit that isn't real yet was judged unnecessary risk.
+
+**Options considered:**
+- Full Phase B as documented (both migrations together) — matches the plan
+  literally, but touches live ingestion code for no near-term payoff
+- Strategy extraction only, defer expert_sources until Phase H actually needs
+  it (chosen) — same functional outcome for the strategy stream, none of the
+  ingestion-layer risk
+- Skip strategy extraction until expert_sources ships first — reverses the
+  plan's own stated rationale for inserting Track B early ("shares the
+  extraction pattern already proven with claims")
+
+**Choice:** Strategy extraction now; expert_sources deferred to Phase H
+(when a second ingestion pattern actually activates).
+
+**Reasoning:** "Do not expand scope until the current phase operates
+reliably" — expert_sources is scope expansion for a capability (multi-source
+experts) that doesn't exist yet. Track B's processing cursor doesn't need
+expert_sources at all; it's an independent column on content_pieces.
+
+**Prompt calibration status:** Both new prompts (`strategy_extraction_v1`,
+`quality_filter_strategy_v1`) are freshly drafted, not yet calibrated against
+real output — no baseline distribution exists. Per `prompts/README.md`, run
+each on a 20-30 piece/strategy held-out sample before trusting output at
+backlog scale; record the first calibration result as a follow-up entry here.
+`claim_extraction_v3` is now wired into the extractor but likewise not yet
+re-measured against v2 on real output.
+
+**What would change this:** Once a second ingestion pattern (blog/podcast,
+Phase H) is actually being built, the expert_sources migration becomes
+necessary at that point, not before.
+
+**Revisit:** Phase H kickoff (expert_sources), and after the first
+strategy_extraction_v1 / quality_filter_strategy_v1 / claim_extraction_v3
+calibration runs (prompt trust).
+
+---
+
 ## 2026-07-04 — "Quality-passed" redefined to include partial verdicts
 
 **Decision:** Downstream layers (starting with validation's

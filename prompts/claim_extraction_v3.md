@@ -9,11 +9,13 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: DRAFTED, NOT ACTIVE.** Do not switch the extractor to this version
-> until Track B (strategy extraction) ships — otherwise strategy statements
-> are dropped by Track A and captured by nothing. Activate in the same change
-> as strategy_extraction_v1, then re-measure both on the same 20-30 piece
-> sample per prompts/README.md before scaling.
+> **STATUS: ACTIVE** (wired into `src/extraction/extractor.py` in the same
+> change that shipped `strategy_extraction_v1` — Phase B kickoff, per
+> `docs/decision_log.md`). Strategy statements are no longer dropped: Track A
+> skips them, Track B (strategy_extraction_v1) now captures them. Re-measure
+> claim extraction on a 20-30 piece held-out sample per `prompts/README.md`
+> before trusting it over v2 output at full-backlog scale — this has not
+> been recalibrated against real output yet.
 >
 > **Version history:**
 > - v1 (initial) — basic extraction with 8-field schema

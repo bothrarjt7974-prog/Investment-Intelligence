@@ -83,7 +83,7 @@ def extract_claims_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
     }
 
     response = claude.call(
-        prompt_name="claim_extraction_v2",
+        prompt_name="claim_extraction_v3",
         content=transcript,
         variables=variables,
     )

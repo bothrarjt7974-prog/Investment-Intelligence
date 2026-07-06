@@ -5,6 +5,64 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-06 — Layer 4 Track B: strategy backtesting engine built
+
+**Decision:** Build the strategy backtesting engine per
+`technical_execution_plan_v3.docx` §8: `src/validation/trigger_vocabulary.py`
+(detector registry) + `src/validation/backtest.py` (simulation harness),
+writing `backtest_record`/`backtest_status` on the `strategies` table. Built
+now even though `strategies` has 0 rows (Track B extraction not yet
+calibrated/run) — same "build ahead of data" pattern as Track A validation.
+
+**Four scoped judgment calls, recorded for future-you:**
+
+1. **Only 5 of 7 trigger types have detectors.**
+   `rate_cut_cycle`/`rate_hike_cycle` (RBI/Fed manual CSVs), `drawdown_threshold`
+   and `currency_regime` (market_data price series), and `always_on` (stride
+   sampling) are implemented. `valuation_extreme_cheap`/`valuation_extreme_rich`
+   are deliberately NOT implemented — they need historical PE/valuation data
+   we don't ingest anywhere (Layer 6 fundamentals, not built). A strategy
+   with one of those two trigger types gets `backtest_status='insufficient_history'`
+   with an explicit reason, never a technical proxy (e.g. price-vs-moving-
+   average) standing in for a fundamentals concept the expert didn't state.
+   **Revisit:** once Layer 6 fundamentals data is ingested.
+
+2. **Exit rule is time-based only.** No parsing of `exit_conditions` free
+   text into a programmatic exit signal — every simulated window holds for
+   exactly `holding_horizon_months` (default 12 if unstated), then exits.
+   Trigger detection is already the hard part of Track B per the plan's own
+   "honest engineering note"; exit-condition NLP is separate scope.
+   **Revisit:** if backtest results look systematically wrong because real
+   exits would have fired earlier/later than the fixed horizon.
+
+3. **Benchmark = single buy-and-hold CAGR over the instrument's full
+   available history, scaled to the strategy's horizon** — not a sampled
+   distribution of random entry-point windows. Simpler, avoids an
+   additional "what counts as random" design fork, and directly answers the
+   plan's literal ask ("comparison vs buy-and-hold benchmark").
+
+4. **India-default geography heuristic.** Strategies have no `geography`
+   column. Rate-cycle detectors use `rbi_rate` unless the resolved
+   fetch_symbol is unambiguously non-Indian (no `.NS` suffix); `currency_regime`
+   hardcodes `inr_usd` regardless of the strategy's own entity. Reasonable
+   given the MVP is single-expert (Akshat), India-focused content.
+   **Revisit:** once non-India strategies actually appear (multi-expert
+   expansion).
+
+**Trigger vocabulary lives in code (`TRIGGER_DETECTORS` dict), not a DB
+table**, despite the plan's tech-stack section saying it should "live in
+the database, versioned" — this repo already has the equivalent precedent
+in `ENTITY_SYMBOL_MAP` (`src/validation/entity_symbol_map.py`), a Python
+dict for the same reason: a trigger type is meaningless without its
+detector function, and functions can't live in a DB row.
+
+**Revisit:** after the first real strategies pass Filter B and get
+backtested — check whether the 90-day episode-gap dedup and the 20%/5%
+thresholds produce sensible window counts on real data, not just synthetic
+test series.
+
+---
+
 ## 2026-07-06 — Phase B kickoff: Track B strategy extraction built; expert_sources deferred to Phase H
 
 **Decision:** Build Track B (strategy extraction) per `technical_execution_plan_v3.docx`

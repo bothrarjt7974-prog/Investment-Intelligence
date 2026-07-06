@@ -261,3 +261,22 @@ def fetch_unfiltered_strategies(limit: int = 100) -> list[dict[str, Any]]:
         .execute()
     )
     return response.data or []
+
+
+def fetch_backtestable_strategies(limit: int = 100) -> list[dict[str, Any]]:
+    """
+    Return strategies ready for Track B backtesting: quality-passed (pass OR
+    partial — same promoted-partial convention as claims, 2026-07-04
+    decision log), in_scope, and not yet backtested.
+    """
+    response = (
+        supabase.table("strategies")
+        .select("*")
+        .in_("quality_verdict", ["pass", "partial"])
+        .eq("scope", "in_scope")
+        .eq("backtest_status", "pending")
+        .order("created_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []

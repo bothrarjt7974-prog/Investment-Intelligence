@@ -41,11 +41,12 @@ verifiable source. The AI is a librarian and matchmaker, not an oracle.
 5. **Validation** (`src/validation/`) — Track A: outcome validation of claims
    against market data when target dates pass (built). Track B: strategy
    backtesting via trigger vocabulary (built — 5 of 7 trigger types have
-   detectors; valuation-based triggers deferred to Layer 6). Credibility
+   detectors; valuation-based triggers deferred to Layer 7). Credibility
    scored per expert, per horizon (short/long/structural), per medium.
 6. **Structural theme synthesis** (`src/synthesis/`) — long-horizon claims
    (12+ months only) combined across experts into themes, weighted by
-   credibility and reasoning independence. Opus.
+   credibility and reasoning independence (built — clusters by canonical
+   entity, not embeddings yet; idle until multiple experts are active). Opus.
 7. **Fundamentals sanity check** (`src/fundamentals/`) — themes verified
    against valuations, earnings trajectory, balance sheet health before
    they can drive guidance. Data from code, judgment from LLM.
@@ -105,7 +106,7 @@ python -m src.extraction.strategy_extractor  # Track B: strategies (Phase B)
 python -m src.quality.screener --max-claims 20  # quality filter (test run)
 python -m src.validation.daily_job        # validation cron
 python -m src.validation.backtest --max-strategies 20  # Track B backtest (test run)
-python -m src.synthesis.briefing          # theme synthesis
+python -m src.synthesis.theme_synthesis --max-clusters 5  # theme synthesis (test run)
 streamlit run app.py                      # UI
 pytest                                    # tests
 ruff check src/                           # linting
@@ -152,11 +153,17 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
   market_data backfilled 2019→present, idle until claims pass the quality
   filter), Track B strategy backtesting engine built (`trigger_vocabulary.py`
   + `backtest.py`, 5 of 7 trigger types supported; idle until strategies
-  pass Filter B — see 2026-07-06 decision log entry)
+  pass Filter B — see 2026-07-06 decision log entry), Layer 6 structural
+  theme synthesis built (migration 007 `themes` table, `theme_synthesis_v1`
+  prompt, `src/internal/theme_scoring.py` convergence weighting; clusters
+  by canonical entity, not embeddings; idle until claim volume + multi-expert
+  data justify it)
 - **Deferred:** expert_sources multi-source migration — pushed to Phase H
   kickoff (when a second ingestion pattern actually activates); see
   2026-07-06 decision log entry. Valuation-based backtest triggers
-  (`valuation_extreme_cheap`/`rich`) — pushed to Layer 6 fundamentals
+  (`valuation_extreme_cheap`/`rich`) — pushed to Layer 7 fundamentals.
+  Embedding-based theme clustering — pushed to Layer 7 (matcher), when
+  Chroma actually gets stood up
   kickoff (need real PE/valuation data, not a technical proxy)
 - **Next:** Calibrate `strategy_extraction_v1` and `quality_filter_strategy_v1`
   on a real held-out sample; re-measure `claim_extraction_v3` against v2;

@@ -263,6 +263,36 @@ def fetch_unfiltered_strategies(limit: int = 100) -> list[dict[str, Any]]:
     return response.data or []
 
 
+def fetch_synthesizable_claims(window_days: int = 90) -> list[dict[str, Any]]:
+    """
+    Return claims eligible for Layer 6 theme synthesis: quality-passed
+    (pass OR partial, same promoted-partial convention as elsewhere),
+    long-horizon (>= 12 months — the plan's "long-horizon claims only" bar
+    for structural synthesis, stricter than claims.scope's 6-month
+    out_of_scope threshold), with a non-null entity to cluster by, claimed
+    within the last `window_days` days.
+    """
+    earliest = pendulum.now("UTC").subtract(days=window_days).to_iso8601_string()
+    response = (
+        supabase.table("claims")
+        .select("*")
+        .in_("quality_verdict", ["pass", "partial"])
+        .gte("target_horizon_months", 12)
+        .not_.is_("entity", "null")
+        .gte("claimed_at", earliest)
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_experts_by_ids(expert_ids: list[str]) -> list[dict[str, Any]]:
+    """Return expert rows (name, credibility scores) for a set of ids."""
+    if not expert_ids:
+        return []
+    response = supabase.table("experts").select("*").in_("id", expert_ids).execute()
+    return response.data or []
+
+
 def fetch_backtestable_strategies(limit: int = 100) -> list[dict[str, Any]]:
     """
     Return strategies ready for Track B backtesting: quality-passed (pass OR

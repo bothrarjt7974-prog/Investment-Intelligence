@@ -5,6 +5,60 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-06 — Layer 6: structural theme synthesis built
+
+**Decision:** Build theme synthesis per `technical_execution_plan_v3.docx`
+§9: `migrations/007_themes.sql` (new `themes` table), `prompts/theme_synthesis_v1.md`
+(Opus, new), `src/internal/theme_scoring.py` (convergence/credibility
+weighting — proprietary, see below), `src/synthesis/theme_synthesis.py`
+(clustering + orchestration). Built now even with a single expert in the
+system (Akshat) and near-zero quality-passed long-horizon claims —
+same "build ahead of data" pattern as Track A validation and Track B
+backtesting: the code is general for the multi-expert case the layer
+exists for, and sits idle until the expert roster and claim volume justify
+it.
+
+**Three scoped judgment calls:**
+
+1. **Clustering is deterministic (by canonical `entity`), not embedding-
+   based.** The plan's long-term vision uses OpenAI embeddings + Chroma for
+   semantic theme clustering, but neither is wired into this codebase yet
+   (config fields exist in `settings.py`; nothing ingests embeddings), and
+   the plan itself schedules that integration at Layer 7 (matcher), not
+   here. v1 produces narrower per-entity/sector themes (a "US tech" theme
+   stays separate from a "GOOGL" theme) rather than broad cross-entity
+   narratives. **Revisit:** once Chroma is actually stood up for Layer 7 —
+   at that point clustering could adopt the same embedding infrastructure.
+
+2. **Convergence scoring lives in `src/internal/theme_scoring.py`,
+   proprietary.** `src/internal/README.md` already lists "Convergence
+   detection scoring rules" as moat logic belonging in that directory
+   alongside `scoring.py`'s credibility formula — this is exactly that.
+   The LLM classifies each claim's reasoning as independent/correlated/echo
+   relative to its cluster; the weighting arithmetic (echo claims collapse
+   into ONE signal regardless of how many experts echo, per the plan's own
+   §9 spec) and the conviction-level thresholds (HIGH: effective signal
+   count >= 3 AND credibility-weighted score >= 65; MEDIUM: >= 2 AND >= 50;
+   a single-contributing-expert cluster is always LOW regardless of that
+   expert's credibility) are v1 placeholders, same "documented for
+   calibration" status as every other threshold in this codebase.
+
+3. **Claims with `entity IS NULL` are out of scope for v1 clustering** —
+   pure macro/opinion claims with no groupable subject can't be clustered
+   deterministically. Logged, not silently dropped. Revisit if this proves
+   to exclude a meaningful share of otherwise-synthesizable claims.
+
+**What would change this:** Once 5-10 experts are active and real
+quality-passed long-horizon claims accumulate, recalibrate the conviction
+thresholds and clustering approach against real convergence patterns
+rather than the single-Akshat baseline this was built against.
+
+**Revisit:** once the expert roster expands past 1 (multi-expert
+convergence is the entire point of this layer) and once `theme_synthesis_v1`
+gets its first real calibration run.
+
+---
+
 ## 2026-07-06 — Layer 4 Track B: strategy backtesting engine built
 
 **Decision:** Build the strategy backtesting engine per

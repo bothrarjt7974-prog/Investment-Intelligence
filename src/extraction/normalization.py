@@ -141,8 +141,12 @@ ENTITY_ALIASES: dict[str, str] = {
 }
 
 # Patterns to recognize ticker-like strings (treated as stock tickers,
-# uppercased automatically).
-TICKER_PATTERN = re.compile(r"^[A-Za-z0-9]{1,8}$")
+# uppercased automatically). Bound is 10, not 8 — ASIANPAINT, HINDUNILVR,
+# BAJFINANCE, TATAMOTORS (10 chars) and ICICIBANK, KOTAKBANK (9 chars) are
+# real tickers already in ENTITY_SYMBOL_MAP; an 8-char cap silently
+# lowercased them instead of uppercasing (bug found while building Layer 7,
+# 2026-07-06 — see decision log).
+TICKER_PATTERN = re.compile(r"^[A-Za-z0-9]{1,10}$")
 
 # Concepts that look like tickers but aren't — these stay lowercase.
 NOT_TICKERS = {

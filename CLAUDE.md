@@ -49,7 +49,9 @@ verifiable source. The AI is a librarian and matchmaker, not an oracle.
    entity, not embeddings yet; idle until multiple experts are active). Opus.
 7. **Fundamentals sanity check** (`src/fundamentals/`) — themes verified
    against valuations, earnings trajectory, balance sheet health before
-   they can drive guidance. Data from code, judgment from LLM.
+   they can drive guidance. Data from code, judgment from LLM (built —
+   valuation is sector-relative, not vs. own history; balance sheet is a
+   deterministic hard veto; idle until themes exist to check).
 8. **Strategy library + matcher** (`src/strategies/`) — unified asset:
    expert-extracted strategies, historical patterns, CFA frameworks.
    Structured filter → embedding match → credibility/backtest weighting.
@@ -107,6 +109,7 @@ python -m src.quality.screener --max-claims 20  # quality filter (test run)
 python -m src.validation.daily_job        # validation cron
 python -m src.validation.backtest --max-strategies 20  # Track B backtest (test run)
 python -m src.synthesis.theme_synthesis --max-clusters 5  # theme synthesis (test run)
+python -m src.fundamentals.checker --max-themes 5  # fundamentals check (test run)
 streamlit run app.py                      # UI
 pytest                                    # tests
 ruff check src/                           # linting
@@ -157,18 +160,25 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
   theme synthesis built (migration 007 `themes` table, `theme_synthesis_v1`
   prompt, `src/internal/theme_scoring.py` convergence weighting; clusters
   by canonical entity, not embeddings; idle until claim volume + multi-expert
-  data justify it)
+  data justify it), Layer 7 fundamentals sanity check built (migration 008,
+  `src/fundamentals/data.py` + `checker.py`, `fundamentals_check_v1` prompt;
+  valuation is sector-relative via a curated peer-ticker basket, not vs.
+  own history; balance sheet is a deterministic hard veto; idle until
+  themes exist)
 - **Deferred:** expert_sources multi-source migration — pushed to Phase H
   kickoff (when a second ingestion pattern actually activates); see
-  2026-07-06 decision log entry. Valuation-based backtest triggers
-  (`valuation_extreme_cheap`/`rich`) — pushed to Layer 7 fundamentals.
-  Embedding-based theme clustering — pushed to Layer 7 (matcher), when
-  Chroma actually gets stood up
-  kickoff (need real PE/valuation data, not a technical proxy)
-- **Next:** Calibrate `strategy_extraction_v1` and `quality_filter_strategy_v1`
-  on a real held-out sample; re-measure `claim_extraction_v3` against v2;
-  finish claim filter calibration → full backlog screening (both tracks) →
-  first real backtest run once strategies exist
+  2026-07-06 decision log entry. Own-history valuation (vs. 5/10yr average)
+  and true multi-quarter earnings-estimate-revision tracking — both need
+  historical fundamentals data not available for free; v1 substitutes
+  sector-relative PE and current growth sign respectively. Embedding-based
+  theme clustering — pushed to Layer 8 (matcher), when Chroma actually gets
+  stood up. Valuation-based backtest triggers (`valuation_extreme_cheap`/`rich`) —
+  need the same historical valuation data, not a technical proxy.
+- **Next:** Calibrate `strategy_extraction_v1`, `quality_filter_strategy_v1`,
+  `theme_synthesis_v1`, and `fundamentals_check_v1` on real held-out samples;
+  re-measure `claim_extraction_v3` against v2; finish claim filter
+  calibration → full backlog screening (both tracks) → first real
+  backtest/synthesis/fundamentals runs once data exists
 - **MVP scope:** 1 expert fully processed (Akshat, ~750 pieces), then expand
   to 10 experts (7 Indian, 3 US); YouTube first, blogs/podcasts Phase H;
   India + US equities; founder as user zero, then 5-10 beta users

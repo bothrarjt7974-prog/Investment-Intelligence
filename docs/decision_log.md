@@ -5,6 +5,73 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-06 — Layer 7: fundamentals sanity check built
+
+**Decision:** Build the fundamentals check per `technical_execution_plan_v3.docx`
+§10: `migrations/008_fundamentals.sql` (inline verdict columns on `themes`,
+not a new table — 1:1 relationship, same convention as
+`claims.quality_verdict`), `src/fundamentals/data.py` (instrument
+resolution, yfinance snapshot fetching, sector-relative valuation,
+deterministic balance-sheet veto), `prompts/fundamentals_check_v1.md`
+(Sonnet, new), `src/fundamentals/checker.py` (orchestration).
+
+**I tested what's actually free before designing this** (ran yfinance
+directly against real tickers): current-snapshot fundamentals (trailing
+PE, P/B, debt/equity, current ratio, earnings/revenue growth, analyst
+recommendation) are available for Indian and US large-caps, no new
+dependency. Two things the plan literally asks for are NOT available for
+free, so v1 substitutes the closest computable analogue:
+
+1. **Valuation: sector-relative, not own 5/10yr history.** No free
+   historical PE time series exists. Confirmed with user before building.
+   I also verified NSE sector indices (`^NSEBANK`, `^CNXIT`, `^NSEI`) don't
+   expose PE via yfinance at all (empirically checked — all `None`; only US
+   sector ETFs like `XLK` do), so a real sector-relative check needed a
+   small curated peer-ticker basket (`SECTOR_PEER_TICKERS` in
+   `src/fundamentals/data.py`, same curation spirit as `ENTITY_SYMBOL_MAP`
+   — a v1 seed list, not exhaustive) rather than a single index lookup.
+   The plan's "1.5x historical average is a red flag" threshold is reused
+   as 1.5x sector-peer average.
+2. **Earnings trajectory: current growth sign, not a 90-day estimate-
+   revision time series.** "Three consecutive analyst estimate cuts" needs
+   historical estimate data not available for free; v1 uses current
+   `earningsGrowth`/`revenueGrowth` as the closest available proxy.
+
+**Instrument resolution reuses theme_synthesis's own output** —
+`instruments_mentioned` (already populated by `theme_synthesis_v1`) is
+checked first; falls back to `entity_cluster_key` itself if it's
+ticker-shaped; otherwise (a sector/index/macro-level theme with nothing
+named) the verdict is `not_applicable`, never a fabricated opinion about
+unnamed instruments.
+
+**Balance sheet health is a deterministic hard veto in code, not an LLM
+judgment call** — the plan says "rejected regardless of expert
+enthusiasm," which is a mechanical rule (`debtToEquity > 200 AND
+currentRatio < 1.0`, both must be present) enforced in
+`src/fundamentals/data.py::check_balance_sheet_red_flag` before the LLM is
+even called. Valuation and earnings trajectory ARE LLM judgment calls on
+top of the code-computed numbers (Sonnet, not Opus — structured rubric
+verdict like the quality filters, not reasoning-chain comparison).
+
+**Bug found and fixed while building this:** `normalization.TICKER_PATTERN`
+capped ticker recognition at 8 characters, but 6 real tickers already in
+`ENTITY_SYMBOL_MAP` are 9-10 characters (ICICIBANK, KOTAKBANK, ASIANPAINT,
+HINDUNILVR, BAJFINANCE, TATAMOTORS) — `normalize_entity` was silently
+lowercasing these instead of uppercasing them, which would have made them
+unresolvable via `entity_symbol_map.py`'s case-sensitive exact-match
+lookup whenever they arrived from an LLM in lowercase. Widened to 10 chars.
+This affected Track A/B normalization too, not just this layer — a
+pre-existing latent bug, not something introduced by fundamentals work,
+just surfaced by it.
+
+**Revisit:** once real themes exist to check (0 today) and
+`fundamentals_check_v1` gets its first calibration run. Revisit
+`SECTOR_PEER_TICKERS` coverage as themes surface sectors not yet in the
+seed list. Revisit the earnings-trajectory proxy and 1.5x threshold once
+enough real verdicts accumulate to compare against actual outcomes.
+
+---
+
 ## 2026-07-06 — Layer 6: structural theme synthesis built
 
 **Decision:** Build theme synthesis per `technical_execution_plan_v3.docx`

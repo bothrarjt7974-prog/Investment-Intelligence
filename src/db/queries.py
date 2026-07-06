@@ -293,6 +293,24 @@ def fetch_experts_by_ids(expert_ids: list[str]) -> list[dict[str, Any]]:
     return response.data or []
 
 
+def fetch_themes_pending_fundamentals_check(limit: int = 100) -> list[dict[str, Any]]:
+    """
+    Return active themes not yet run through Layer 7 (fundamentals sanity
+    check): status='active', fundamentals_verdict IS NULL, oldest
+    synthesized_at first.
+    """
+    response = (
+        supabase.table("themes")
+        .select("*")
+        .eq("status", "active")
+        .is_("fundamentals_verdict", "null")
+        .order("synthesized_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []
+
+
 def fetch_backtestable_strategies(limit: int = 100) -> list[dict[str, Any]]:
     """
     Return strategies ready for Track B backtesting: quality-passed (pass OR

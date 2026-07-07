@@ -1,0 +1,61 @@
+# Template for a CFA / institutional-practice strategy library entry.
+# Copy this file, rename it, and fill in every field with a REAL, citable
+# methodology — do not invent or approximate. This file itself is never
+# loaded as data (src/strategies/framework_loader.py skips TEMPLATE.yaml
+# by name).
+#
+# See frameworks/README.md for why this directory ships empty.
+
+# Unique human-readable name. Also the idempotency key — the loader skips
+# a file whose source_name already exists in the strategies table, so
+# don't reuse a name across different real frameworks.
+source_name: "Example — Name Of The Real Framework"
+
+# 'cfa_framework' (CFA Institute / textbook canon) or 'institutional'
+# (investment classics, institutional publications — endowment model, risk
+# parity, factor investing).
+source_type: cfa_framework
+
+# One of: allocation, entry_methodology, exit_methodology, position_sizing,
+# rebalancing, risk_management, full_playbook, framework
+# (same vocabulary as prompts/strategy_extraction_v1.md's strategy_type)
+strategy_type: allocation
+
+# The methodology itself, condensed to 1-3 sentences, in the same style as
+# extracted strategies — specific, quantified, no vague language.
+strategy_text: >
+  Replace this with the real methodology description.
+
+# Canonical entity/sector/asset-class this applies to — same naming rules
+# as src/extraction/normalization.py's ENTITY_ALIASES (lowercase_with_underscores
+# for sectors/asset classes, e.g. broad_equity, indian_banking; UPPERCASE
+# for a specific ticker). Use a broad asset-class name for genuinely
+# general frameworks (e.g. broad_equity, global_multi_asset).
+entity_class: broad_equity
+
+# When this methodology applies (nullable — many frameworks are always-on).
+# Free text; the trigger vocabulary (src/validation/trigger_vocabulary.py)
+# is for backtesting expert-extracted strategies, not required here.
+trigger_conditions: null
+
+# How much — percentages, weights, ranges. Be specific.
+allocation_rule: "Replace with the real allocation percentages/ranges."
+
+# Per-position caps or concentration limits, if the framework specifies them.
+position_sizing: null
+
+# How to build the position (lump sum, DCA, etc.), if specified.
+entry_methodology: null
+
+# Stated minimum/target hold, in months, if specified.
+holding_horizon_months: null
+
+# When to trim or exit / rebalance trigger, if specified.
+exit_conditions: null
+
+# Stated risk controls or failure modes, if specified.
+risk_framework: null
+
+# Why this methodology works — the framework's own stated rationale, not
+# your paraphrase of it.
+reason_given: "Replace with the framework's own rationale."

@@ -5,6 +5,73 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-07 — Layer 8: strategy library + matcher built
+
+**Decision:** Build the strategy library and matcher per
+`technical_execution_plan_v3.docx` §11: migration 009 (strategy library
+columns + `theme_strategy_matches`), `src/strategies/embeddings.py`
+(OpenAI embeddings + Chroma), `src/strategies/historical_patterns.py`
+(source #2 of the library), `src/strategies/framework_loader.py` (source
+#3/#4 ingestion mechanism), `src/strategies/matcher.py` (structured filter
++ semantic rank + credibility/backtest weighting).
+
+**Chromadb re-added — the blocker that removed it is gone.** `requirements.txt`
+had "chromadb removed: not used in code and requires onnxruntime on Python
+3.14." I re-tested before building on top of this assumption: `pip install
+chromadb` succeeded cleanly (onnxruntime now ships a 3.14 wheel), and a
+real add/query round-trip worked. Re-added, comment updated.
+
+**Structured filter + semantic rank fuse into one Chroma query**, not the
+plan's literal two-stage pipeline: every strategy is embedded *with* its
+filterable metadata (entity_class, scope, quality_verdict, source_type)
+attached, so `collection.query(..., where={...})` does both steps in one
+call. Verified empirically that Chroma's `$and`/`$in` where-clause
+operators compose as expected. Also verified empirically that Chroma
+defaults to squared-L2 distance, not cosine — the collection is created
+with `metadata={"hnsw:space": "cosine"}` explicitly; the plan calls for
+cosine similarity ranking specifically and the default would have silently
+given the wrong ranking.
+
+**v1 structured filter is exact entity_class match**, not a sector-hierarchy
+match (a "US tech" theme won't match a broader "us_equities" strategy).
+No entity taxonomy exists in this codebase; building one now, against a
+library with 0 rows, is unjustified scope. **Revisit:** once the library
+has real volume to test hierarchy-matching against.
+
+**CFA/institutional frameworks: ingestion mechanism only, zero seeded
+content.** `frameworks/` (new top-level directory, alongside `prompts/`
+and `migrations/` — NOT under `data/`, which is entirely gitignored and
+would have silently swallowed a committed template) ships with a loader
+and `TEMPLATE.yaml` only. Encoding real methodology is finance-consultant
+work per the plan ("2-3 weeks"), not something to fabricate for a SEBI RIA
+product bound by "never invent strategies not present in the library."
+**Revisit:** when the founder or a consultant is ready to populate real
+frameworks.
+
+**Historical pattern detection reuses `normalization.py`'s existing
+strategy-dedup math** (`strategy_similarity`, `pick_best_strategy` —
+promoted from private to public names, two call sites updated) rather than
+writing a second similarity implementation: the "same methodology restated"
+signal is identical whether it's within one video (already handled) or
+across an expert's whole history (new).
+
+**Matcher weighting lives in `src/strategies/`, not `src/internal/`** —
+`src/internal/README.md` enumerates credibility formula, fluke detection,
+and convergence scoring as what belongs there; retrieval-fusion weighting
+(semantic + backtest + credibility → ranked shortlist) isn't the same kind
+of proprietary judgment. Flagged for visibility, not an obvious call either way.
+
+**Reality check:** `strategies` has 0 rows (Track B extraction never run
+at scale) and 0 of the 27 backfilled themes have cleared fundamentals
+checking yet. This layer is idle by construction until both catch up —
+same pattern as every layer this session.
+
+**Revisit:** after Track B extraction actually runs on the backlog and
+`fundamentals_checker` runs on the 27 themes — that's when this layer has
+anything real to embed or match.
+
+---
+
 ## 2026-07-06 — Layer 7: fundamentals sanity check built
 
 **Decision:** Build the fundamentals check per `technical_execution_plan_v3.docx`

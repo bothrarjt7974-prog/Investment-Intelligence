@@ -8,7 +8,13 @@ psycopg2-binary>=2.9.9
 sqlalchemy>=2.0.0
 
 # --- Vector store ---
-# chromadb removed: not used in code and requires onnxruntime on Python 3.14
+# Re-added 2026-07-07 (Layer 8): the onnxruntime/Python 3.14 build issue
+# that justified removing this is resolved (onnxruntime now ships a 3.14
+# wheel) — verified with a real pip install + add/query round-trip.
+chromadb>=1.0.0
+
+# --- YAML (CFA/institutional framework ingestion, Layer 8) ---
+pyyaml>=6.0
 
 # --- Content ingestion ---
 youtube-transcript-api>=0.6.2

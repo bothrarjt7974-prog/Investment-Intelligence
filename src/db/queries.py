@@ -311,6 +311,84 @@ def fetch_themes_pending_fundamentals_check(limit: int = 100) -> list[dict[str, 
     return response.data or []
 
 
+def fetch_strategies_pending_embedding(limit: int = 100) -> list[dict[str, Any]]:
+    """
+    Return quality-passed, in-scope strategies not yet embedded into
+    Chroma (src/strategies/embeddings.py).
+    """
+    response = (
+        supabase.table("strategies")
+        .select("*")
+        .in_("quality_verdict", ["pass", "partial"])
+        .eq("scope", "in_scope")
+        .is_("embedded_at", "null")
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_strategies_by_expert(expert_id: str) -> list[dict[str, Any]]:
+    """
+    Return one expert's quality-passed, in-scope, expert_extracted
+    strategies — input to historical pattern detection
+    (src/strategies/historical_patterns.py). source_type is restricted to
+    expert_extracted so a pattern is never derived from other patterns or
+    from CFA/institutional frameworks.
+    """
+    response = (
+        supabase.table("strategies")
+        .select("*")
+        .eq("expert_id", expert_id)
+        .eq("source_type", "expert_extracted")
+        .in_("quality_verdict", ["pass", "partial"])
+        .eq("scope", "in_scope")
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_existing_framework_source_names() -> set[str]:
+    """
+    Return every non-null source_name already in the strategies table —
+    src/strategies/framework_loader.py's idempotency check (a framework
+    file is only loaded once).
+    """
+    response = (
+        supabase.table("strategies")
+        .select("source_name")
+        .not_.is_("source_name", "null")
+        .execute()
+    )
+    return {row["source_name"] for row in (response.data or []) if row.get("source_name")}
+
+
+def fetch_themes_ready_for_matching(limit: int = 100) -> list[dict[str, Any]]:
+    """
+    Return active themes that cleared fundamentals (pass or downgrade —
+    reject/not_applicable/insufficient_data themes don't get matched to
+    execution strategies). Input to src/strategies/matcher.py.
+    """
+    response = (
+        supabase.table("themes")
+        .select("*")
+        .eq("status", "active")
+        .in_("fundamentals_verdict", ["pass", "downgrade"])
+        .limit(limit)
+        .execute()
+    )
+    return response.data or []
+
+
+def delete_theme_strategy_matches(theme_id: str) -> None:
+    """
+    Delete all existing match rows for one theme — theme_strategy_matches
+    is a recomputed ranking cache (src/strategies/matcher.py), not an
+    append-only log; re-matching replaces, never accumulates.
+    """
+    supabase.table("theme_strategy_matches").delete().eq("theme_id", theme_id).execute()
+
+
 def fetch_backtestable_strategies(limit: int = 100) -> list[dict[str, Any]]:
     """
     Return strategies ready for Track B backtesting: quality-passed (pass OR

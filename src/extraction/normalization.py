@@ -645,7 +645,7 @@ def _parse_strategy(raw: dict[str, Any]) -> Strategy | None:
     )
 
 
-def _strategy_similarity(a: Strategy, b: Strategy) -> float:
+def strategy_similarity(a: Strategy, b: Strategy) -> float:
     """Same three-signal approach as _claim_similarity, applied to strategy_text."""
     words_a = _important_words(a.strategy_text)
     words_b = _important_words(b.strategy_text)
@@ -674,7 +674,7 @@ def _strategy_similarity(a: Strategy, b: Strategy) -> float:
     return min(score, 1.0)
 
 
-def _pick_best_strategy(strategies: list[Strategy]) -> Strategy:
+def pick_best_strategy(strategies: list[Strategy]) -> Strategy:
     """
     From a group of similar strategies, keep the most complete one:
     more populated fields first, then longer strategy_text.
@@ -730,13 +730,13 @@ def deduplicate_strategies_within_video(strategies: list[Strategy]) -> list[Stra
             for j in range(i + 1, len(group)):
                 if j in assigned:
                     continue
-                if _strategy_similarity(strategy, group[j]) >= STRATEGY_SIMILARITY_THRESHOLD:
+                if strategy_similarity(strategy, group[j]) >= STRATEGY_SIMILARITY_THRESHOLD:
                     cluster.append(group[j])
                     assigned.add(j)
             clusters.append(cluster)
 
         for cluster in clusters:
-            best = _pick_best_strategy(cluster)
+            best = pick_best_strategy(cluster)
             if len(cluster) > 1:
                 removed_count += len(cluster) - 1
                 logger.debug(

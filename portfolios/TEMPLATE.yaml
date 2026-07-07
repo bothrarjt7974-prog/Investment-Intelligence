@@ -1,0 +1,39 @@
+# Template for a real user portfolio. Copy this file, rename it, and fill
+# in real data — do not load this file itself (the seed script skips
+# TEMPLATE.yaml by name).
+#
+# See portfolios/README.md — this holds real financial data, handle
+# accordingly.
+
+name: "Replace With Real Name"
+
+# Unique identifier / idempotency key — the loader skips a file whose
+# email is already seeded.
+email: "replace@example.com"
+
+# 'conservative' | 'moderate' | 'aggressive'
+risk_profile: moderate
+
+# Free text — India-specific tax situation (slab, NRI status, LTCG
+# already utilized this financial year, etc.). Fed directly into the
+# guidance prompt's tax reasoning.
+tax_notes: null
+
+# Sector/instrument exclusions, ESG preferences, etc. — a list of free-text strings.
+restrictions: []
+
+portfolio_name: "Primary"
+
+# One entry per tax lot — a second purchase of the same entity at a
+# different date/price is a SEPARATE entry, not merged into the first.
+holdings:
+  - entity: "RELIANCE"          # canonical entity name — same rules as claims/strategies
+    quantity: 100
+    acquired_at: "2023-01-15"   # YYYY-MM-DD
+    cost_basis: 2450.00         # purchase price per unit (₹), used for tax-impact estimation
+    asset_class: equity         # equity | mutual_fund | etf | bond | gold | crypto | cash
+  - entity: "nifty50"
+    quantity: 500
+    acquired_at: "2022-06-01"
+    cost_basis: 180.50
+    asset_class: etf

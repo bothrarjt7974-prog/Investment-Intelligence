@@ -389,6 +389,66 @@ def delete_theme_strategy_matches(theme_id: str) -> None:
     supabase.table("theme_strategy_matches").delete().eq("theme_id", theme_id).execute()
 
 
+def fetch_active_users() -> list[dict[str, Any]]:
+    """Return all active users — Layer 9 guidance generation's outer loop."""
+    response = supabase.table("users").select("*").eq("is_active", True).execute()
+    return response.data or []
+
+
+def fetch_user_by_email(email: str) -> dict[str, Any] | None:
+    """Look up a user by email — src/guidance/portfolio_seed.py's idempotency key."""
+    response = supabase.table("users").select("*").eq("email", email).limit(1).execute()
+    return response.data[0] if response.data else None
+
+
+def fetch_portfolios_for_user(user_id: str) -> list[dict[str, Any]]:
+    """Return every portfolio belonging to one user."""
+    response = supabase.table("portfolios").select("*").eq("user_id", user_id).execute()
+    return response.data or []
+
+
+def fetch_portfolio_holdings(portfolio_id: str) -> list[dict[str, Any]]:
+    """Return every holding (one row per tax lot) in one portfolio."""
+    response = (
+        supabase.table("portfolio_holdings").select("*").eq("portfolio_id", portfolio_id).execute()
+    )
+    return response.data or []
+
+
+def fetch_active_guidance(theme_id: str, portfolio_id: str) -> list[dict[str, Any]]:
+    """
+    Return active/executing guidance for one theme+portfolio pair —
+    src/guidance/eligibility.py's duplicate-guidance gate.
+    """
+    response = (
+        supabase.table("portfolio_guidance")
+        .select("id")
+        .eq("theme_id", theme_id)
+        .eq("portfolio_id", portfolio_id)
+        .in_("status", ["active", "executing"])
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_best_strategy_match(theme_id: str) -> dict[str, Any] | None:
+    """
+    Return the top-ranked (rank=1) strategy matched to one theme, or None
+    if the matcher hasn't run / found nothing for this theme.
+    """
+    match_response = (
+        supabase.table("theme_strategy_matches")
+        .select("strategy_id")
+        .eq("theme_id", theme_id)
+        .eq("rank", 1)
+        .limit(1)
+        .execute()
+    )
+    if not match_response.data:
+        return None
+    return fetch_by_id("strategies", match_response.data[0]["strategy_id"])
+
+
 def fetch_backtestable_strategies(limit: int = 100) -> list[dict[str, Any]]:
     """
     Return strategies ready for Track B backtesting: quality-passed (pass OR

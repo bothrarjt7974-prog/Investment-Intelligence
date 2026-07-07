@@ -6,6 +6,11 @@
 *.key
 secrets/
 
+# Real user portfolio data (Layer 9) — real financial PII, never commit.
+# TEMPLATE.yaml is the exception (tracked schema reference, no real data).
+portfolios/*.yaml
+!portfolios/TEMPLATE.yaml
+
 # Python
 __pycache__/
 *.py[cod]

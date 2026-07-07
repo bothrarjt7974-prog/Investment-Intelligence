@@ -60,8 +60,13 @@ verifiable source. The AI is a librarian and matchmaker, not an oracle.
    entity_class match not a sector hierarchy; idle until the library has
    real strategies).
 9. **Guidance + delivery** (`src/guidance/`, `src/delivery/`) — allocation
-   guidance generation (theme + strategy + user portfolio), weekly digest,
-   event alerts, monitoring, feedback loop.
+   guidance generation (theme + strategy + user portfolio) built —
+   deterministic eligibility gates + refusal logging, Opus synthesis for
+   the recommendation itself; strongest calibration warning of any prompt
+   in this codebase, idle until multi-expert convergence produces a
+   medium/high-conviction theme. Delivery (`src/delivery/` — weekly
+   digest, event alerts, broker integration) explicitly NOT built —
+   deferred, needs a real UI decision.
 
 ## Tech Stack
 
@@ -118,6 +123,8 @@ python -m src.strategies.embeddings --max-strategies 20  # embed strategies into
 python -m src.strategies.historical_patterns  # detect repeated expert methodology
 python -m src.strategies.framework_loader     # load CFA/institutional frameworks from frameworks/
 python -m src.strategies.matcher --max-themes 5  # match themes to library strategies (test run)
+python -m src.guidance.portfolio_seed          # load real portfolios from portfolios/
+python -m src.guidance.generator --max-themes 5  # generate guidance / log refusals (test run)
 streamlit run app.py                      # UI
 pytest                                    # tests
 ruff check src/                           # linting
@@ -155,55 +162,67 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
 
 ## Current Status & MVP Scope
 
-- **Done:** All 8 layers through the strategy library + matcher have code
-  and passing tests (276 tests). As of the 2026-07-07 full-system review,
-  every layer has now run at least once against real data (not just
-  synthetic unit tests) — see that decision log entry for the complete
-  trace and every finding. Active prompts: `claim_extraction_v4`,
+- **Done: all 9 layers have code and passing tests (313 tests).** As of
+  the 2026-07-07 full-system review + Layer 9 build, every layer through
+  guidance generation has code; Layers 1-7 and part of 8 have run against
+  real data (see the 2026-07-07 decision log entries for the complete
+  trace and every finding). Active prompts: `claim_extraction_v4`,
   `strategy_extraction_v2`, `quality_filter_v3`, `quality_filter_strategy_v1`,
-  `theme_synthesis_v1`, `fundamentals_check_v1` — all six have now been run
-  on real (if small) samples; none are calibrated at full-backlog scale yet.
-  27 real themes exist (2026-07-06 backfill catch-up); all 27 have been
-  fundamentals-checked (5 pass, 1 downgrade, 1 reject, 13 not_applicable, 7
-  insufficient_data). 1 strategy has a complete real backtest.
+  `theme_synthesis_v1`, `fundamentals_check_v1`, `guidance_generation_v1` —
+  none calibrated at full-backlog scale; `guidance_generation_v1` has never
+  run at all yet (see below) and carries the strongest calibration warning
+  in this codebase. 27 real themes exist (2026-07-06 backfill catch-up),
+  all fundamentals-checked (5 pass, 1 downgrade, 1 reject, 13
+  not_applicable, 7 insufficient_data). 1 strategy has a complete real
+  backtest. Strategy library seeded with 11 real CFA/institutional
+  frameworks (`frameworks/`, 2026-07-07) spanning 6 of 8 strategy types.
+  Delivery (`src/delivery/`) is explicitly NOT built — deferred pending a
+  real UI decision.
 - **Deferred:** expert_sources multi-source migration — pushed to Phase H
-  kickoff (when a second ingestion pattern actually activates). Own-history
-  valuation (vs. 5/10yr average) and true multi-quarter earnings-estimate-
-  revision tracking — both need historical fundamentals data not available
-  for free; v1 substitutes sector-relative PE and current growth sign
-  respectively. Embedding-based theme clustering (Layer 6 still clusters by
-  exact entity match) — Chroma exists now (Layer 8) so this is no longer
-  blocked on infra, just not yet revisited. Matcher's structured filter is
-  exact entity_class match plus a `broad_equity` fallback, not a full
-  sector hierarchy. Valuation-based backtest triggers
-  (`valuation_extreme_cheap`/`rich`) — need real historical valuation data,
-  not a technical proxy. CFA/institutional frameworks — `frameworks/` ships
-  with the loader only, zero real content until a consultant fills it in.
-  `src/validation/backtest.py` has no on-demand market-data backfill (Track
-  A's `ensure_symbol_backfilled` equivalent) — a newly-added
-  `ENTITY_SYMBOL_MAP` entry silently reports `insufficient_history` until
-  manually backfilled (see 2026-07-07 decision log entry).
-  `ENTITY_SYMBOL_MAP` is missing several tickers real themes/claims already
-  reference (`indian_airlines`, AMD, BHARTIARTL, INDIGO, SWIGGY, MCDONALDS,
-  KFC, HUL, DABUR, NESTLEIND, IOC) — grow it as these keep surfacing.
-- **BLOCKED on two billing/account issues, not code** (found 2026-07-07):
-  OpenAI API key has `insufficient_quota` — blocks `src/strategies/embeddings.py`
-  and therefore the matcher entirely. Anthropic API credit balance is too
-  low — blocks any further extraction (the `strategy_extraction_v2`
-  calibration batch was cut short at 11/20 pieces because of this).
-  **The Anthropic blocker must clear before the full 732-piece backlog run
-  can happen at all.**
+  kickoff. Own-history valuation and true multi-quarter earnings-estimate-
+  revision tracking — need historical fundamentals data not free to get;
+  v1 substitutes sector-relative PE and current growth sign. Embedding-
+  based theme clustering (Layer 6 still clusters by exact entity match) —
+  Chroma exists now so this is unblocked on infra, just not yet revisited.
+  Matcher's structured filter is exact entity_class match plus a
+  `broad_equity` fallback, not a full sector hierarchy. Valuation-based
+  backtest triggers — need real historical valuation data, not a technical
+  proxy. `src/validation/backtest.py` has no on-demand market-data
+  backfill (Track A's `ensure_symbol_backfilled` equivalent) — a newly-
+  added `ENTITY_SYMBOL_MAP` entry silently reports `insufficient_history`
+  until manually backfilled. `ENTITY_SYMBOL_MAP` is missing several
+  tickers real themes/claims already reference (`indian_airlines`, AMD,
+  BHARTIARTL, INDIGO, SWIGGY, MCDONALDS, KFC, HUL, DABUR, NESTLEIND, IOC)
+  — grow it as these surface. Delivery (weekly digest, broker links,
+  Zerodha integration) — needs a real UI decision, not started.
+- **BLOCKED on one billing/account issue** (found 2026-07-07, still open):
+  **OpenAI API key has `insufficient_quota`** — confirmed still failing
+  even after a credit top-up (separate account/billing from Anthropic —
+  check platform.openai.com specifically). Blocks
+  `src/strategies/embeddings.py` and therefore the matcher entirely —
+  Layer 8 has never produced a real `theme_strategy_matches` row. Anthropic
+  is confirmed resolved (the interrupted `strategy_extraction_v2`
+  calibration batch completed cleanly; full 20-piece batch shows 0
+  invented trigger types).
+- **Reality check on Layer 9:** all 27 existing themes have
+  `conviction_level='low'` (single-expert clusters are hard-coded LOW).
+  Guidance generation will correctly refuse on every one of them until
+  multi-expert convergence exists — this is "silence is a valid and
+  frequent output" working as designed, not a bug. Seed your own portfolio
+  (`portfolios/`, copy `TEMPLATE.yaml`, real financial data — gitignored
+  by default) and run `src.guidance.generator` to exercise the refusal
+  path; that's the only real exercise available until then.
 - **Full-backlog-run gate checklist** (all must hold before spending on
-  the remaining 732 pieces): (a) Anthropic + OpenAI accounts funded;
-  (b) `claim_extraction_v4` calibration result (8% pass on 20 pieces)
-  reviewed and accepted — re-confirm on a larger sample if desired;
-  (c) `strategy_extraction_v2`'s zero-invented-types result reconfirmed
-  on the remaining 9 pieces of its calibration batch; (d) founder review of
-  the 2026-07-07 decision log entry in full.
-- **Next:** Once the gate above clears — full 732-piece run through
-  `claim_extraction_v4` + `strategy_extraction_v2`, then full backlog
-  screening (both quality filters), then re-run validator/backtest/
-  fundamentals/matcher at real volume.
+  the remaining 732 pieces): (a) OpenAI account funded (Anthropic already
+  is); (b) `claim_extraction_v4`'s 8%-pass result reviewed and accepted;
+  (c) `strategy_extraction_v2`'s zero-invented-types result held across
+  the full 20-piece batch (confirmed); (d) founder review of the
+  2026-07-07 decision log entries in full.
+- **Next:** Once OpenAI is funded — run the matcher for the first time on
+  real data (embeddings have never succeeded). Then, once the gate above
+  clears — full 732-piece run through `claim_extraction_v4` +
+  `strategy_extraction_v2`, full backlog screening, then re-run validator/
+  backtest/fundamentals/matcher/guidance at real volume.
 - **MVP scope:** 1 expert fully processed (Akshat, ~750 pieces), then expand
   to 10 experts (7 Indian, 3 US); YouTube first, blogs/podcasts Phase H;
   India + US equities; founder as user zero, then 5-10 beta users

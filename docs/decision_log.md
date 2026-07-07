@@ -5,6 +5,46 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-07 — CFA/institutional framework library seeded; both billing blockers status update
+
+**Decision:** Seed `frameworks/` with 11 real, publicly documented
+investment methodologies at the founder's explicit direction — a reversal
+of the original "ingestion mechanism only, zero content" stance from the
+2026-07-07 Layer 8 entry, made by the person with the authority to make
+that call. Each framework's specific figures were verified via web search
+against current sources rather than drawn from memory alone (Yale/Swensen
+allocation, Dalio All Weather's 30/40/15/7.5/7.5 split, the CFA Institute's
+own 5pp rebalancing-band example, India's current Section 112A LTCG
+figures). Covers 6 of the 8 `strategy_type` categories. Loaded via the
+existing `framework_loader.py` — confirmed that mechanism works against
+real files, and surfaced + fixed a real bug (`allocation_rule` was wrongly
+required on every framework; 5 of the 11 are legitimately non-allocation
+types). See commit for the full framework list.
+
+**India-specific tax framework, not the US default:** the obvious
+"tax-loss harvesting" search result is the US wash-sale rule, which
+doesn't apply here — this is a SEBI RIA product for Indian investors.
+Verified and encoded India's actual Section 112A mechanics instead
+(₹1.25 lakh annual LTCG exemption, 12.5% above it, no wash-sale-equivalent
+restriction on immediate repurchase).
+
+**Billing status, both raised in the prior entry:** Anthropic credit
+balance — **confirmed resolved**, the interrupted `strategy_extraction_v2`
+calibration batch completed cleanly (9 remaining pieces, 0 new strategies,
+0 invented trigger types — the full 20-piece batch now shows 0 invented
+types across all 7 strategies extracted). OpenAI `insufficient_quota` —
+**still blocking**, confirmed by re-running `sync_strategy_embeddings`
+after the user's credit top-up; OpenAI billing is a separate account from
+Anthropic's, so the top-up likely only reached one of the two. Embeddings
+and the matcher remain unexercised on real data until this clears.
+
+**Revisit:** run `sync_strategy_embeddings` + `src.strategies.matcher`
+once OpenAI is unblocked — this closes the last untested link in Layer 8
+(theme → strategy matching has never produced a real
+`theme_strategy_matches` row).
+
+---
+
 ## 2026-07-07 — Full-system review: real integration gaps found and fixed before the full backlog run
 
 **Context:** With all 8 built layers running for the first time on real data

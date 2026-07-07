@@ -5,6 +5,108 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-07 — Full-system review: real integration gaps found and fixed before the full backlog run
+
+**Context:** With all 8 built layers running for the first time on real data
+(20-piece Track B calibration, Filter B on those 6 strategies, the 27-theme
+synthesis backfill), the goal was to find and fix everything fixable on
+small data before paying for the 732-piece backlog run, so spend happens
+once. This entry consolidates that review, the fixes made, the calibration
+results the affected prompts' own headers required, and what's still
+blocking further progress.
+
+**Fixes shipped (see the commit for full diffs):**
+
+1. **`claim_extraction_v4`** — fixes the quality filter's documented root
+   cause (2026-07-04 entry): `reason_given` was a 1-2 sentence paraphrase,
+   too thin for the filter to ever score "strong." v4 asks for the
+   verbatim reasoning chain (3-6 sentences, preserving every number/event/
+   framework the expert cites) instead. Also adds `is_conditional`/
+   `condition_text` (migration 010) so `validator.py` can finally assign
+   `conditional_unresolved` (existed in the schema since migration 001,
+   never populated) instead of force-scoring if/then claims as unconditional.
+   **Calibration result (20 fresh pieces, 40 claims extracted, screened
+   through the unchanged `quality_filter_v3`): 3 pass / 33 partial / 4 fail
+   = 8% pass, up from the v3 baseline's ~1.6% (2/122).** Manually spot-checked
+   3 `pass` claims — `reason_given` now carries real mechanism, numbers, and
+   counter-arguments (e.g. ITC distribution-network claim citing "4.3 million
+   of an estimated 8 million retail stores"), not padding. Verdicts read as
+   honest, not inflated.
+2. **`strategy_extraction_v2`** — closes `trigger_conditions.type` to a
+   fixed 7-value enum. v1's "invent a new type if none fit" escape hatch
+   was used for real content (`market_cycle_shift`, `sector_cycle`), and
+   any type outside `TRIGGER_DETECTORS`'s fixed registry is permanently
+   undetectable by the backtest engine, not just a richer label.
+   **Calibration result (11 pieces processed before hitting an Anthropic
+   credit-balance wall — see blockers below — 7 strategies extracted):
+   zero invented types.** All 7 used `always_on` or `valuation_extreme_cheap`,
+   both valid enum values. (The 2 pre-existing `market_cycle_shift`/
+   `sector_cycle` rows are v1-era leftovers, kept per tag-don't-delete, not
+   a v2 failure.)
+3. **`broad_equity` integration** — real finding: 5 of 6 v1-calibration
+   strategies used this entity_class (the prompt's own catch-all for
+   general strategies), and it matched 0 themes (no exact `entity_cluster_key`
+   match) and dead-ended every backtest (unresolvable in `ENTITY_SYMBOL_MAP`).
+   Added to `ENTITY_SYMBOL_MAP` (`^NSEI`/nifty50 proxy — reasonable given
+   the current expert roster is India-focused; revisit once a US-focused
+   expert's `broad_equity` strategies need a different default) and to the
+   matcher's structured filter as a fallback candidate for equity/sector
+   themes specifically (excluded for macro/commodity/FX/crypto themes via
+   an explicit curated list — a "broad equity" strategy isn't a sensible
+   answer to a currency or rate view).
+4. **`historical_patterns.py`** now inherits `'partial'` when any source
+   strategy in a cluster is partial, instead of hardcoding `'pass'` for
+   every promoted pattern regardless of input quality.
+
+**End-to-end trace completed on existing small data (Phase 2):**
+Track A validator ran (5 validatable claims: 2 opinion_only, 3
+data_unavailable — see finding below). Track B backtest ran: after
+backfilling `broad_equity`'s market_data (never bulk-backfilled since it
+was just added — see finding below), 1 strategy completed with real
+windows and returns; 3 remain `insufficient_history` (the 2 pre-existing
+invented-type rows, honestly un-backtestable, plus 1 more). Fundamentals
+checker ran on all 27 backfilled themes: 5 pass, 1 downgrade, 1 reject, 13
+not_applicable, 7 insufficient_data, 0 errors.
+
+**New findings, not yet fixed (logged for a future pass, out of this
+review's approved scope):**
+
+- **`indian_airlines` and several theme-`instruments_mentioned` tickers
+  (AMD, BHARTIARTL, INDIGO, SWIGGY, MCDONALDS, KFC, HUL, DABUR, NESTLEIND,
+  IOC) aren't in `ENTITY_SYMBOL_MAP`.** Expected — the map documents
+  itself as "not exhaustive" — but it's now a live gap blocking real
+  validation/fundamentals coverage, not a hypothetical one. Grow the map
+  as these keep surfacing.
+- **`src/validation/backtest.py` has no on-demand-backfill safety net.**
+  `validator.py` (Track A) has `ensure_symbol_backfilled` for exactly this
+  reason (2026-07-06 decision log entry); Track B's backtest engine calls
+  `price_series`/`price_on` directly and silently reports
+  `insufficient_history` ("0 valid trigger windows found") when an
+  entity's `market_data` was never bulk-backfilled — which is exactly what
+  happened to `broad_equity` until backfilled manually just now. Worth
+  the same fix Track A already has.
+
+**Blockers requiring account/billing action, not code (found running this
+review, not fixable by me):**
+
+- **OpenAI API: `insufficient_quota` (429).** Blocks `src/strategies/embeddings.py`
+  entirely, which blocks the matcher — Layer 8 has never actually produced
+  a `theme_strategy_matches` row because of this, not a code defect.
+- **Anthropic API: credit balance too low (400).** Hit mid-way through the
+  `strategy_extraction_v2` calibration batch (11 of 20 pieces completed
+  first; the other 9 tagged with the error, not silently retried — the
+  existing error-handling worked exactly as designed). **This blocks the
+  732-piece backlog run entirely until resolved** — it is the single
+  precondition for everything else in this review being put to use at scale.
+
+**Revisit:** once both API accounts are funded — re-run the remaining 9
+pieces of the `strategy_extraction_v2` calibration batch to confirm the
+zero-invented-types result holds past 11 samples, then decide on the full
+732-piece run. Add the `ENTITY_SYMBOL_MAP` entries found missing above.
+Consider porting Track A's on-demand backfill to Track B.
+
+---
+
 ## 2026-07-07 — Layer 8: strategy library + matcher built
 
 **Decision:** Build the strategy library and matcher per

@@ -14,15 +14,15 @@
 >
 > **Model:** Opus
 >
-> **STATUS: NEW, v1. REQUIRES CALIBRATION BEFORE SCALING.** No baseline
-> exists yet. Run on real clusters once enough quality-passed long-horizon
-> claims exist (currently near-zero — filter calibration is still the
-> upstream gate) and manually review independence labels against the source
-> claims before trusting this at scale, per `prompts/README.md`. With a
-> single expert in the system today (Akshat), every cluster only has one
-> voice — independence classification is trivial (nothing to compare
-> against) until the expert roster grows. Record the first real calibration
-> in `docs/decision_log.md`.
+> **STATUS: RAN ON 27 REAL CLUSTERS (2026-07-06 backfill catch-up), never
+> manually spot-checked against source claims.** With a single expert in
+> the system today (Akshat), every cluster has exactly one contributing
+> voice, so independence classification within a cluster (when the same
+> expert states related claims across different pieces) is the only signal
+> exercised so far — cross-expert independence is untested until the
+> roster grows. Manually review a sample of the 27 real theses/independence
+> labels against source claims before trusting this further; genuine
+> calibration (per `prompts/README.md`) is still pending.
 >
 > **Version history:**
 > - v1 (initial) — schema per `technical_execution_plan_v3.docx` §9.

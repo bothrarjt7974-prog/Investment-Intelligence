@@ -15,11 +15,14 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: NEW, v1. REQUIRES CALIBRATION BEFORE SCALING.** No baseline
-> exists yet — `themes` has 0 rows with real long-horizon conviction today.
-> Run on a real sample once themes exist and manually review verdicts
-> against the fetched numbers before trusting this at scale, per
-> `prompts/README.md`. Record the first calibration in `docs/decision_log.md`.
+> **STATUS: RAN ON ALL 27 REAL THEMES (2026-07-07), never manually
+> spot-checked against the fetched numbers.** Result: 5 pass, 1 downgrade,
+> 1 reject, 13 not_applicable (sector/macro themes with no named
+> instrument), 7 insufficient_data (instrument named but not in
+> `ENTITY_SYMBOL_MAP` — see 2026-07-07 decision log entry for the specific
+> tickers). 0 errors. Manually review the 5 pass + 1 downgrade + 1 reject
+> verdicts against their fetched fundamentals before trusting this
+> further; genuine calibration (per `prompts/README.md`) is still pending.
 >
 > **Version history:**
 > - v1 (initial) — schema per `technical_execution_plan_v3.docx` §10,

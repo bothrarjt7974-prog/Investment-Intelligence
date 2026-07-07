@@ -9,7 +9,8 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: NEW, v4. REQUIRES CALIBRATION BEFORE SCALING.** Fixes two
+> **STATUS: CALIBRATED (2026-07-07) — material pass-rate improvement on a
+> 20-piece sample, not yet confirmed at full-backlog scale.** Fixes two
 > documented defects found by measuring v3 output at real volume (see
 > 2026-07-07 decision log entry):
 >
@@ -24,10 +25,13 @@
 >    `is_conditional`/`condition_text` so the validator can finally use it
 >    honestly (`src/validation/validator.py`).
 >
-> Run on a 20-30 piece held-out sample per `prompts/README.md`, re-screen
-> through `quality_filter_v3`, and compare the pass/partial/fail
-> distribution against the v3 baseline (0% pass on 122 claims) before
-> trusting this at full-backlog scale. Record the result in the decision log.
+> **Calibration result (20 fresh pieces, 40 claims, re-screened through
+> unchanged `quality_filter_v3`): 3 pass / 33 partial / 4 fail = 8% pass**,
+> up from the v3 baseline's ~1.6%. Manually spot-checked 3 `pass` claims —
+> `reason_given` carries real mechanism, numbers, and counter-arguments,
+> not padding. Still only a 20-piece sample; re-confirm the distribution
+> holds before/during the full 732-piece backlog run, not just trust this
+> single batch indefinitely.
 >
 > **Version history:**
 > - v1 (initial) — basic extraction with 8-field schema

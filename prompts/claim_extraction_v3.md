@@ -9,13 +9,11 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: ACTIVE** (wired into `src/extraction/extractor.py` in the same
-> change that shipped `strategy_extraction_v1` — Phase B kickoff, per
-> `docs/decision_log.md`). Strategy statements are no longer dropped: Track A
-> skips them, Track B (strategy_extraction_v1) now captures them. Re-measure
-> claim extraction on a 20-30 piece held-out sample per `prompts/README.md`
-> before trusting it over v2 output at full-backlog scale — this has not
-> been recalibrated against real output yet.
+> **STATUS: SUPERSEDED by claim_extraction_v4 (2026-07-07).** Was wired
+> into `extractor.py` at Phase B kickoff but never recalibrated at scale
+> before v4 replaced it — v3 shares v2's thin `reason_given` capture, which
+> the 2026-07-04 diagnosis identified as the reason `quality_filter_v3`
+> only cleared 1.6% of real claims. Kept here for reference and rollback.
 >
 > **Version history:**
 > - v1 (initial) — basic extraction with 8-field schema

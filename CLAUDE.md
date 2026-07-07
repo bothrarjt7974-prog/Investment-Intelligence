@@ -155,51 +155,55 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
 
 ## Current Status & MVP Scope
 
-- **Done:** Ingestion (YouTube), claim extraction v3 active (2026-07-06,
-  Phase B kickoff), strategy extraction built (Track B —
-  `strategy_extraction_v1`, migration 006), normalization (claims tested,
-  strategies built), claim quality filter (v3 calibrating — the current
-  gate for claims), strategy quality filter built (Filter B, not yet
-  calibrated), Track A outcome validation + credibility scoring (built;
-  market_data backfilled 2019→present, idle until claims pass the quality
-  filter), Track B strategy backtesting engine built (`trigger_vocabulary.py`
-  + `backtest.py`, 5 of 7 trigger types supported; idle until strategies
-  pass Filter B — see 2026-07-06 decision log entry), Layer 6 structural
-  theme synthesis built (migration 007 `themes` table, `theme_synthesis_v1`
-  prompt, `src/internal/theme_scoring.py` convergence weighting; clusters
-  by canonical entity, not embeddings; idle until claim volume + multi-expert
-  data justify it — 2026-07-06 backfill catch-up run produced 27 real
-  themes from the existing claim backlog, 0 fundamentals-checked yet),
-  Layer 7 fundamentals sanity check built (migration 008,
-  `src/fundamentals/data.py` + `checker.py`, `fundamentals_check_v1` prompt;
-  valuation is sector-relative via a curated peer-ticker basket, not vs.
-  own history; balance sheet is a deterministic hard veto; idle until
-  run against the 27 themes), Layer 8 strategy library + matcher built
-  (migration 009, `src/strategies/embeddings.py`+`historical_patterns.py`+
-  `framework_loader.py`+`matcher.py`, chromadb re-added; idle until
-  strategies exist — Track B extraction never run at scale)
+- **Done:** All 8 layers through the strategy library + matcher have code
+  and passing tests (276 tests). As of the 2026-07-07 full-system review,
+  every layer has now run at least once against real data (not just
+  synthetic unit tests) — see that decision log entry for the complete
+  trace and every finding. Active prompts: `claim_extraction_v4`,
+  `strategy_extraction_v2`, `quality_filter_v3`, `quality_filter_strategy_v1`,
+  `theme_synthesis_v1`, `fundamentals_check_v1` — all six have now been run
+  on real (if small) samples; none are calibrated at full-backlog scale yet.
+  27 real themes exist (2026-07-06 backfill catch-up); all 27 have been
+  fundamentals-checked (5 pass, 1 downgrade, 1 reject, 13 not_applicable, 7
+  insufficient_data). 1 strategy has a complete real backtest.
 - **Deferred:** expert_sources multi-source migration — pushed to Phase H
-  kickoff (when a second ingestion pattern actually activates); see
-  2026-07-06 decision log entry. Own-history valuation (vs. 5/10yr average)
-  and true multi-quarter earnings-estimate-revision tracking — both need
-  historical fundamentals data not available for free; v1 substitutes
-  sector-relative PE and current growth sign respectively. Embedding-based
-  theme clustering (Layer 6 still clusters by exact entity match) — Chroma
-  now exists (Layer 8) so this is no longer blocked on infra, just not yet
-  revisited. Matcher's structured filter is exact entity_class match, not
-  a sector hierarchy (e.g. "us_tech" theme won't match a "us_equities"
-  strategy) — no taxonomy exists yet. Valuation-based backtest triggers
-  (`valuation_extreme_cheap`/`rich`) — need the same historical valuation
-  data, not a technical proxy. CFA/institutional frameworks — `frameworks/`
-  ships with the loader only, zero real content until a consultant fills it in.
-- **Next:** Run Track B strategy extraction on the backlog (never run at
-  scale — this is what everything in Layer 8 is waiting on) and
-  `fundamentals_checker` on the 27 existing themes. Calibrate
-  `strategy_extraction_v1`, `quality_filter_strategy_v1`,
-  `theme_synthesis_v1`, and `fundamentals_check_v1` on real held-out samples;
-  re-measure `claim_extraction_v3` against v2; finish claim filter
-  calibration → full backlog screening (both tracks) → first real
-  backtest/synthesis/fundamentals runs once data exists
+  kickoff (when a second ingestion pattern actually activates). Own-history
+  valuation (vs. 5/10yr average) and true multi-quarter earnings-estimate-
+  revision tracking — both need historical fundamentals data not available
+  for free; v1 substitutes sector-relative PE and current growth sign
+  respectively. Embedding-based theme clustering (Layer 6 still clusters by
+  exact entity match) — Chroma exists now (Layer 8) so this is no longer
+  blocked on infra, just not yet revisited. Matcher's structured filter is
+  exact entity_class match plus a `broad_equity` fallback, not a full
+  sector hierarchy. Valuation-based backtest triggers
+  (`valuation_extreme_cheap`/`rich`) — need real historical valuation data,
+  not a technical proxy. CFA/institutional frameworks — `frameworks/` ships
+  with the loader only, zero real content until a consultant fills it in.
+  `src/validation/backtest.py` has no on-demand market-data backfill (Track
+  A's `ensure_symbol_backfilled` equivalent) — a newly-added
+  `ENTITY_SYMBOL_MAP` entry silently reports `insufficient_history` until
+  manually backfilled (see 2026-07-07 decision log entry).
+  `ENTITY_SYMBOL_MAP` is missing several tickers real themes/claims already
+  reference (`indian_airlines`, AMD, BHARTIARTL, INDIGO, SWIGGY, MCDONALDS,
+  KFC, HUL, DABUR, NESTLEIND, IOC) — grow it as these keep surfacing.
+- **BLOCKED on two billing/account issues, not code** (found 2026-07-07):
+  OpenAI API key has `insufficient_quota` — blocks `src/strategies/embeddings.py`
+  and therefore the matcher entirely. Anthropic API credit balance is too
+  low — blocks any further extraction (the `strategy_extraction_v2`
+  calibration batch was cut short at 11/20 pieces because of this).
+  **The Anthropic blocker must clear before the full 732-piece backlog run
+  can happen at all.**
+- **Full-backlog-run gate checklist** (all must hold before spending on
+  the remaining 732 pieces): (a) Anthropic + OpenAI accounts funded;
+  (b) `claim_extraction_v4` calibration result (8% pass on 20 pieces)
+  reviewed and accepted — re-confirm on a larger sample if desired;
+  (c) `strategy_extraction_v2`'s zero-invented-types result reconfirmed
+  on the remaining 9 pieces of its calibration batch; (d) founder review of
+  the 2026-07-07 decision log entry in full.
+- **Next:** Once the gate above clears — full 732-piece run through
+  `claim_extraction_v4` + `strategy_extraction_v2`, then full backlog
+  screening (both quality filters), then re-run validator/backtest/
+  fundamentals/matcher at real volume.
 - **MVP scope:** 1 expert fully processed (Akshat, ~750 pieces), then expand
   to 10 experts (7 Indian, 3 US); YouTube first, blogs/podcasts Phase H;
   India + US equities; founder as user zero, then 5-10 beta users

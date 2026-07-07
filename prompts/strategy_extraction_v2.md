@@ -10,21 +10,27 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: NEW, v2. REQUIRES CALIBRATION BEFORE SCALING.** Fixes a
-> documented defect found by running v1 on real content (see 2026-07-07
-> decision log entry): v1's trigger vocabulary guidance said "invent a new
-> type only if none of these fit" — real output exploited that escape
-> hatch, inventing `market_cycle_shift` and `sector_cycle` for content that
-> mapped reasonably well onto existing types. Every invented type is
-> automatically undetectable by `src/validation/trigger_vocabulary.py`
-> (`TRIGGER_DETECTORS` is a fixed registry, not something the prompt can
-> extend), so an invented type silently dead-ends the strategy at
-> `insufficient_history` forever. v2 makes the type list closed — no
-> exceptions — and requires best-fit mapping instead.
+> **STATUS: CALIBRATED (2026-07-07) — zero invented types on a partial
+> sample; batch was cut short by an Anthropic credit-balance wall, not a
+> prompt failure.** Fixes a documented defect found by running v1 on real
+> content (see 2026-07-07 decision log entry): v1's trigger vocabulary
+> guidance said "invent a new type only if none of these fit" — real
+> output exploited that escape hatch, inventing `market_cycle_shift` and
+> `sector_cycle` for content that mapped reasonably well onto existing
+> types. Every invented type is automatically undetectable by
+> `src/validation/trigger_vocabulary.py` (`TRIGGER_DETECTORS` is a fixed
+> registry, not something the prompt can extend), so an invented type
+> silently dead-ends the strategy at `insufficient_history` forever. v2
+> makes the type list closed — no exceptions — and requires best-fit
+> mapping instead.
 >
-> Run on a 20-30 piece held-out sample and verify **zero** trigger types
-> outside the closed list appear before trusting this at full-backlog
-> scale. Record the result in `docs/decision_log.md`.
+> **Calibration result: 11 of a planned 20-piece sample processed (the
+> other 9 hit an Anthropic API credit-balance error, tagged not silently
+> retried) before running out of budget for this run. 7 strategies
+> extracted, 0 invented trigger types** — all used `always_on` or
+> `valuation_extreme_cheap`, both valid enum values. Re-run the remaining
+> 9 pieces once the Anthropic account is funded to confirm this holds past
+> 11 samples before trusting it at full-backlog scale.
 >
 > **Version history:**
 > - v1 (initial) — schema per `technical_execution_plan_v3.docx` §5 and §14.

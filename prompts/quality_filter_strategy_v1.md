@@ -11,11 +11,16 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: NEW, v1. REQUIRES CALIBRATION BEFORE SCALING.** Run on a
-> 20-30 strategy held-out sample (once `strategy_extraction_v2` has
-> produced real rows to screen) before trusting the pass rate at scale,
-> same process as `quality_filter_v3`. No baseline distribution exists
-> yet — record the first calibration result in `docs/decision_log.md`.
+> **STATUS: FIRST REAL BATCH SCREENED (2026-07-07), sample size still
+> small.** Ran on the 6 strategies from the first `strategy_extraction_v1`
+> calibration batch: 0 pass / 4 partial / 2 fail. Justifications read as
+> substantive and correctly discriminating (e.g. correctly flagged a
+> ₹15,000/month SIP rule as non-scale-invariant, correctly credited an
+> ATR/Williams %R trigger as more than qualitative) — same "directionally
+> strong, rarely specifies numerics/exit conditions" pattern the claim
+> filter shows on this expert's content. Re-run on a larger sample (the 7
+> strategies from the `strategy_extraction_v2` calibration batch, and
+> again once the full backlog runs) before treating this distribution as final.
 >
 > **Version history:**
 > - v1 (initial) — 5-dimension scoring per `technical_execution_plan_v3.docx` §7.

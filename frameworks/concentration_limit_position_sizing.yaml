@@ -1,0 +1,28 @@
+source_name: "Position Concentration Limits (Institutional Single-Name Cap)"
+source_type: cfa_framework
+strategy_type: position_sizing
+strategy_text: >
+  Cap any single stock position at a fixed maximum percentage of total
+  portfolio value (commonly 5-10% for a high-conviction individual-investor
+  portfolio; institutional mandates are often stricter, e.g. 3-5%), and
+  cap any single sector at a higher but still bounded percentage (commonly
+  20-25%). A position that grows beyond its cap through appreciation is
+  trimmed back to the cap rather than left to run unbounded, independent
+  of whether the original thesis still holds.
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: null
+position_sizing: "Single stock: max 5-10% of portfolio. Single sector: max 20-25% of portfolio. Caps apply on a mark-to-market basis, not just at initial purchase."
+entry_methodology: null
+holding_horizon_months: null
+exit_conditions: "Trim any position that has appreciated beyond its concentration cap back down to the cap, regardless of the underlying thesis's status"
+risk_framework: "Prevents a single successful position from silently becoming a portfolio-dominating, undiversified bet purely through price appreciation — the single largest source of catastrophic-loss risk in concentrated portfolios is a position nobody actively chose to be that large"
+reason_given: >
+  Even a high-conviction thesis carries idiosyncratic risk — company-specific
+  fraud, regulatory action, a single failed product, a key-person loss —
+  that no amount of fundamental conviction eliminates. A position that
+  compounds from 5% to 30% of the portfolio through pure price
+  appreciation exposes the investor to that idiosyncratic risk at a scale
+  they never deliberately chose; capping and trimming back to the
+  original sizing decision keeps concentration risk intentional rather
+  than accidental.

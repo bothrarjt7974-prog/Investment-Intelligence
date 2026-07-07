@@ -1,0 +1,26 @@
+source_name: "Dollar-Cost Averaging (Systematic Entry Methodology)"
+source_type: cfa_framework
+strategy_type: entry_methodology
+strategy_text: >
+  Deploy a fixed amount of capital at regular intervals (commonly monthly)
+  over a defined period (commonly 6-12 months for a lump sum being phased
+  in, or indefinitely for ongoing savings) rather than investing the full
+  amount at once. Standard practitioner risk-management technique for
+  entering a position or market when the investor wants to reduce the
+  impact of entry-point timing risk.
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: null
+position_sizing: null
+entry_methodology: "Fixed amount invested at regular intervals (e.g. monthly) over the phase-in period, rather than lump sum"
+holding_horizon_months: null
+exit_conditions: null
+risk_framework: "Averages the entry price across market fluctuations during the phase-in window, reducing (not eliminating) the risk of committing a large sum right before a downturn"
+reason_given: >
+  Because no one can reliably time market entry, spreading purchases over
+  time smooths out the entry price and removes the psychological and
+  financial risk of a single poorly-timed lump-sum entry, at the cost of
+  some expected return in a rising market (since a lump sum invested
+  immediately outperforms DCA on average in markets that trend upward,
+  which is the majority of historical periods — DCA is a risk-reduction
+  tool, not a return-maximization one).

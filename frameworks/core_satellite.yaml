@@ -1,0 +1,25 @@
+source_name: "Core-Satellite Portfolio Construction (Balanced Variant)"
+source_type: cfa_framework
+strategy_type: full_playbook
+strategy_text: >
+  Hold 70% of the portfolio in a passive "core" (broad index funds/ETFs
+  tracking the total market) and 30% in "satellite" positions (individual
+  stock picks, sector bets, or thematic exposures) intended to add
+  incremental return on top of the market baseline. The 70/30 split is
+  the "balanced" variant of this framework; more conservative investors
+  use 80/20, more aggressive/return-focused investors use 60/40.
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: "70% core (passive, broad-market index funds), 30% satellite (active stock/sector selection)"
+position_sizing: "No single satellite position should be large enough to meaningfully alter total portfolio risk if it goes to zero — satellites are individually sized within the 30% sleeve, not concentrated in one name"
+entry_methodology: "Core built via lump sum or DCA into broad index funds; satellite positions added opportunistically as specific theses develop"
+holding_horizon_months: null
+exit_conditions: "Core is rarely sold outright (rebalanced, not exited); satellite positions are exited individually when their specific thesis plays out or breaks, independent of the core"
+risk_framework: "The 70% core caps the portfolio's downside to roughly market-level performance even if every satellite bet fails; satellites are where genuine active-management risk is taken, deliberately bounded to a minority of the portfolio"
+reason_given: >
+  Most active stock-picking underperforms a low-cost index over long
+  horizons, but investors often want some exposure to specific
+  convictions (a stock, a sector, a theme). Core-satellite construction
+  captures the reliable, low-cost market return in the core while
+  bounding the amount of the portfolio exposed to concentrated
+  stock-picking risk in the satellite sleeve.

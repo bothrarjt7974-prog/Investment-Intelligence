@@ -1,0 +1,34 @@
+source_name: "Indian LTCG Exemption Harvesting (Section 112A, India-Specific Tax-Aware Methodology)"
+source_type: cfa_framework
+strategy_type: exit_methodology
+strategy_text: >
+  For listed Indian equity shares and equity-oriented mutual funds held
+  over 12 months, long-term capital gains up to ₹1,25,000 per financial
+  year are exempt from tax (Section 112A); gains beyond that threshold are
+  taxed at a flat 12.5% (effective from July 2024). Each financial year,
+  realize (sell and optionally immediately repurchase) long-term gains up
+  to the ₹1.25 lakh exemption threshold across the portfolio's long-term
+  holdings, resetting the cost basis on those shares tax-free, before the
+  threshold resets at the start of the next financial year. Short-term
+  gains (holding under 12 months) are taxed at a flat 20% (Section 111A)
+  and are not the target of this exemption.
+entity_class: indian_equity_market
+trigger_conditions:
+  type: always_on
+  description: "Annual, timed to the Indian financial year-end (March 31) — a standing tax-calendar rule, not a market-condition trigger"
+allocation_rule: null
+position_sizing: "Harvest up to but not exceeding the ₹1,25,000 annual exemption threshold in aggregate long-term gains across the portfolio — harvesting beyond it defeats the purpose since the excess is taxed anyway"
+entry_methodology: null
+holding_horizon_months: 12
+exit_conditions: "Sell long-term (12+ month) holdings with unrealized gains, in aggregate up to the ₹1.25 lakh annual exemption, before the financial year ends; optionally repurchase immediately (India has no wash-sale-equivalent rule blocking immediate repurchase, unlike the US)"
+risk_framework: "This is a tax-efficiency mechanism, not a directional or risk-management strategy — it should never override the underlying investment thesis for a holding; do not sell a position purely to harvest the exemption if the position should be held longer per its own thesis"
+reason_given: >
+  The ₹1.25 lakh LTCG exemption resets every financial year and does not
+  carry forward — unused exemption in one year is permanently lost.
+  Systematically realizing gains up to this threshold annually (rather
+  than only when a position is naturally sold) converts otherwise-taxable
+  future gains into effectively tax-free gains, compounding meaningfully
+  over a multi-decade holding period. India's tax code, unlike the US,
+  has no wash-sale rule preventing immediate repurchase after a
+  loss/gain-harvesting sale, making this mechanically simpler to execute
+  than the equivalent US strategy.

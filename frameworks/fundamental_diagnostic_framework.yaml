@@ -1,0 +1,30 @@
+source_name: "Fundamental Diagnostic Framework (Quality, Valuation, Capital Allocation)"
+source_type: cfa_framework
+strategy_type: framework
+strategy_text: >
+  Evaluate individual stock selections on three pillars before taking a
+  position: (1) earnings quality — is reported growth backed by real cash
+  flow, not accounting adjustments or one-off items; (2) valuation — is
+  the current price reasonable relative to the company's own historical
+  multiple range and its sector peers, not just "growing"; (3) capital
+  allocation — does management deploy free cash flow (reinvestment,
+  buybacks, dividends, M&A) in ways that historically create or destroy
+  shareholder value. This is a diagnostic lens applied to any candidate
+  position, not itself an allocation or sizing rule.
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: null
+position_sizing: null
+entry_methodology: null
+holding_horizon_months: null
+exit_conditions: "Re-run the same three-pillar diagnostic periodically (e.g. each earnings cycle) — deteriorating earnings quality, valuation becoming stretched without justification, or a capital-allocation track record turning value-destructive are each independent reasons to revisit the position, distinct from the original directional thesis"
+risk_framework: "Balance-sheet health and cash-flow quality checks here are a first-pass qualitative screen, not a substitute for the deterministic fundamentals check every position undergoes before real guidance is generated"
+reason_given: >
+  A company can show impressive headline earnings growth funded by
+  aggressive accounting, at a valuation multiple divorced from history or
+  peers, run by management with a track record of destroying value
+  through poorly-timed M&A or buybacks at inflated prices — a purely
+  growth-narrative-driven stock pick misses all three of these
+  fundamentals-based warning signs. Applying all three lenses together
+  catches failure modes that any single lens (e.g. growth rate alone)
+  would miss.

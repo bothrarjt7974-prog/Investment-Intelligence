@@ -32,12 +32,18 @@ REQUIRED_FIELDS = (
     "strategy_type",
     "strategy_text",
     "entity_class",
-    "allocation_rule",
     "reason_given",
 )
 VALID_SOURCE_TYPES = ("cfa_framework", "institutional")
 
+# allocation_rule is optional, not required — a rebalancing/entry/exit/
+# risk-management/position-sizing/framework strategy legitimately has no
+# allocation percentage (2026-07-07 fix: the original required-field list
+# rejected 5 of the first 10 real frameworks loaded for exactly this
+# reason). Matches strategy_extraction_v2's own schema, where
+# allocation_rule is nullable ("a pure exit-timing rule" has none).
 OPTIONAL_FIELDS = (
+    "allocation_rule",
     "trigger_conditions",
     "position_sizing",
     "entry_methodology",

@@ -1,0 +1,22 @@
+source_name: "60/40 Balanced Portfolio (Classic)"
+source_type: institutional
+strategy_type: allocation
+strategy_text: >
+  Allocate 60% of the portfolio to equities and 40% to fixed income
+  (government/high-grade bonds), rebalanced periodically back to target.
+  The oldest and most widely benchmarked institutional balanced-portfolio
+  construction, predating and underlying most modern variants (including
+  the Yale Model, which was explicitly built as a departure from it).
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: "60% equities, 40% fixed income (government/high-grade bonds)"
+position_sizing: null
+entry_methodology: "Lump sum or phased entry into the 60/40 target weights"
+holding_horizon_months: null
+exit_conditions: null
+risk_framework: "Bond allocation dampens equity drawdowns; standard institutional benchmark for a moderate risk profile"
+reason_given: >
+  Equities provide long-run growth; bonds provide ballast during equity
+  drawdowns and reduce overall portfolio volatility, historically at a
+  favorable cost to long-run returns for investors who cannot tolerate a
+  100% equity allocation's volatility.

@@ -1,0 +1,29 @@
+source_name: "Percentage-of-Portfolio Rebalancing Bands (CFA Institute Standard)"
+source_type: cfa_framework
+strategy_type: rebalancing
+strategy_text: >
+  Set a tolerance band (commonly 5 percentage points) around each asset
+  class's strategic target weight. For a 60/40 strategic allocation with a
+  5pp band, the corridor is 55-65% for equities and 35-45% for bonds — if
+  either asset class drifts outside its band, rebalance the entire
+  portfolio back to target weights. This is the CFA Institute's
+  standard-cited example of range-based (as opposed to calendar-based)
+  rebalancing.
+entity_class: broad_equity
+trigger_conditions:
+  type: drawdown_threshold
+  description: "Any asset class's actual weight drifting more than 5 percentage points from its strategic target weight (in either direction) — not specifically a drawdown, but the same 'threshold crossing' detection shape"
+allocation_rule: null
+position_sizing: null
+entry_methodology: null
+holding_horizon_months: null
+exit_conditions: "Trim the overweight asset class and add to the underweight one whenever any asset class breaches its 5pp band, restoring strategic target weights"
+risk_framework: "Prevents an asset class's drift (from differential returns) from silently changing the portfolio's actual risk profile away from what was originally intended"
+reason_given: >
+  Without periodic rebalancing, a portfolio's actual weights drift from
+  its intended strategic allocation as asset classes perform differently
+  — a strong equity bull run turns a 60/40 portfolio into a 70/30
+  portfolio with materially more risk than the investor originally
+  chose. Percentage bands enforce discipline (sell high, buy low
+  mechanically) without requiring the high transaction costs of
+  continuous rebalancing.

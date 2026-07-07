@@ -1,0 +1,27 @@
+source_name: "Yale Endowment Model (Swensen Diversification — Individual Investor Adaptation)"
+source_type: institutional
+strategy_type: allocation
+strategy_text: >
+  Diversify broadly across six asset classes rather than concentrating in
+  domestic stocks and bonds: 20% US stocks, 20% foreign developed-market
+  stocks, 10% emerging-market stocks, 20% REITs, 15% US bonds, 15%
+  inflation-protected bonds. This is David Swensen's own published
+  adaptation of Yale's institutional endowment approach for individual
+  investors (in "Unconventional Success") — the actual Yale institutional
+  portfolio is far more alternatives-heavy (illiquid private equity,
+  venture capital, hedge funds) and not replicable by individual investors
+  using public securities, which is why this adapted version exists.
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: "20% US equities, 20% foreign developed equities, 10% emerging market equities, 20% REITs, 15% US bonds, 15% TIPS"
+position_sizing: "No single asset class beyond REITs (20%) should dominate; heavy home-country bias avoided"
+entry_methodology: "Lump sum or phased entry into target weights across six low-cost index funds/ETFs"
+holding_horizon_months: null
+exit_conditions: null
+risk_framework: "Diversification across imperfectly-correlated asset classes (equities, real assets, inflation-protected bonds) reduces reliance on any single economic regime"
+reason_given: >
+  Swensen argued that broad diversification across asset classes with low
+  mutual correlation — rather than concentration in domestic stocks and
+  bonds — improves risk-adjusted returns over long horizons, and that
+  meaningful real-asset (REIT) and inflation-protected exposure guards
+  against inflation regimes that hurt nominal bonds.

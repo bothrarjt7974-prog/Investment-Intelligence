@@ -43,12 +43,25 @@ class TestParseFrameworkFile:
 
     def test_rejects_missing_required_field(self, tmp_path):
         data = valid_framework()
-        del data["allocation_rule"]
+        del data["entity_class"]
         path = tmp_path / "bad.yaml"
         _write_yaml(path, data)
 
         with pytest.raises(ValueError, match="missing required fields"):
             parse_framework_file(path)
+
+    def test_allocation_rule_is_optional(self, tmp_path):
+        # 2026-07-07 fix: a rebalancing/entry/exit/risk-management/
+        # position-sizing/framework strategy legitimately has no
+        # allocation percentage — must not be rejected for omitting it.
+        data = valid_framework()
+        del data["allocation_rule"]
+        path = tmp_path / "rebalancing.yaml"
+        _write_yaml(path, data)
+
+        row = parse_framework_file(path)
+
+        assert row["allocation_rule"] is None
 
     def test_rejects_invalid_source_type(self, tmp_path):
         path = tmp_path / "bad.yaml"

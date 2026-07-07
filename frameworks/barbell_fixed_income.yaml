@@ -1,0 +1,26 @@
+source_name: "Barbell Strategy (Fixed-Income Duration Risk Management)"
+source_type: institutional
+strategy_type: risk_management
+strategy_text: >
+  Within the fixed-income sleeve of a portfolio, concentrate holdings at
+  the two ends of the maturity spectrum — very short-duration (cash,
+  short-term bonds) and very long-duration (long-term bonds) — while
+  avoiding intermediate-duration bonds entirely. The short end provides
+  liquidity and insulation from interest-rate risk; the long end captures
+  higher yield and duration-driven price appreciation if rates fall.
+entity_class: broad_equity
+trigger_conditions: null
+allocation_rule: "Fixed-income sleeve split between short-duration (cash-like) and long-duration bonds, with minimal-to-zero intermediate-duration exposure"
+position_sizing: "The short/long split within the fixed-income sleeve is typically balanced (e.g. 50/50) but can be tilted based on the investor's rate-view and liquidity needs"
+entry_methodology: null
+holding_horizon_months: null
+exit_conditions: "Shift the split toward the short end if capital preservation/liquidity becomes the priority; shift toward the long end to capture duration if rates are expected to fall"
+risk_framework: "Avoids the specific scenario where intermediate-duration bonds underperform both ends during certain yield-curve shape changes (e.g. curve flattening/steepening events) — a barbell is more robust to yield-curve-shape risk than a concentrated intermediate-duration ('bullet') position"
+reason_given: >
+  A pure intermediate-duration bond allocation is exposed to a specific
+  risk: if the yield curve twists (steepens or flattens) rather than
+  shifting in parallel, intermediate bonds can underperform a barbell of
+  the same average duration. The barbell also gives the investor
+  optionality — the short end can be redeployed quickly if better
+  opportunities emerge, while the long end still captures the higher
+  yield/duration benefit.

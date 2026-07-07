@@ -1,0 +1,29 @@
+source_name: "Ray Dalio All Weather Portfolio (Risk Parity, Bridgewater Associates)"
+source_type: institutional
+strategy_type: allocation
+strategy_text: >
+  Allocate 30% to equities, 40% to long-term government bonds, 15% to
+  intermediate-term government bonds, 7.5% to gold, and 7.5% to broad
+  commodities. Unlike dollar-weighted allocations, this mix is designed so
+  the equity and long-bond sleeves each contribute roughly equal amounts
+  of portfolio RISK (equities are far more volatile per dollar than
+  bonds, so bonds get more dollars) — the "risk parity" principle Dalio
+  popularized via Bridgewater's All Weather fund.
+entity_class: broad_equity
+trigger_conditions:
+  type: always_on
+  description: "Standing all-weather allocation, not conditioned on a specific market regime — designed to hold up across growth, recession, inflation, and deflation regimes without needing to time the cycle"
+allocation_rule: "30% equities, 40% long-term treasuries, 15% intermediate treasuries, 7.5% gold, 7.5% broad commodities"
+position_sizing: "Sized by risk contribution, not dollar weight — the smaller bond percentages still carry meaningful portfolio risk share given bond volatility"
+entry_methodology: "Lump sum or phased entry into the five-asset target weights"
+holding_horizon_months: null
+exit_conditions: "Periodic rebalancing back to the risk-parity target weights; no market-timing exit"
+risk_framework: "Explicitly designed to avoid concentration in any single economic regime — equities do well in growth/low-inflation, bonds in deflation, gold/commodities in inflation, so no single environment can severely damage the whole portfolio"
+reason_given: >
+  Dalio's thesis is that most portfolios are secretly concentrated in
+  equity risk even when they look diversified by dollar allocation,
+  because equities are so much more volatile than bonds. Balancing risk
+  contribution rather than dollar allocation across assets that respond
+  differently to growth and inflation surprises is intended to produce
+  more consistent performance across economic environments, at some cost
+  to upside in strong bull markets.

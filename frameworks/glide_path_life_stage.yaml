@@ -1,0 +1,31 @@
+source_name: "Age-Based Equity Glide Path (100/110-Minus-Age Rule, Life-Stage Allocation)"
+source_type: institutional
+strategy_type: allocation
+strategy_text: >
+  Set equity allocation as (100 minus current age) percent, with the
+  remainder in bonds/fixed income — e.g. a 30-year-old holds ~70%
+  equities, a 60-year-old holds ~40%. The original "100 minus age" rule
+  dates from the 1980s-90s pension era; contemporary versions ("110 minus
+  age" or "120 minus age") shift toward higher equity allocations at every
+  age given longer life expectancies, the decline of defined-benefit
+  pensions, and structurally lower bond yields since the original rule
+  was formulated. Equity exposure declines gradually ("glides down") as
+  the investor ages, rather than shifting all at once.
+entity_class: broad_equity
+trigger_conditions:
+  type: always_on
+  description: "Standing age-indexed rule, recalculated periodically (e.g. annually) as the investor ages, not tied to a market condition"
+allocation_rule: "Equity % = 100 (or 110/120 for a more aggressive variant) minus current age; remainder in bonds/fixed income"
+position_sizing: null
+entry_methodology: null
+holding_horizon_months: null
+exit_conditions: "Gradually reduce equity allocation and increase bond allocation each year (or on a periodic schedule) in line with the chosen glide-path formula as the investor ages"
+risk_framework: "Reduces sequence-of-returns risk near and during retirement — a market crash shortly before or after retirement, when the investor is also withdrawing funds, does more permanent damage than the same crash decades earlier while still accumulating"
+reason_given: >
+  Younger investors have a long horizon to recover from equity drawdowns
+  and benefit most from equity's higher long-run returns; investors near
+  or in retirement have less time to recover and are simultaneously
+  withdrawing funds, making a large equity drawdown far more damaging at
+  that life stage (sequence-of-returns risk). A gradually declining
+  equity glide path manages this risk without requiring the investor to
+  make a single large reallocation decision at any one point in time.

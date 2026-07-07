@@ -112,6 +112,11 @@ def detect_patterns_for_expert(expert_id: str) -> list[dict[str, Any]]:
 
             best = pick_best_strategy(cluster)
             source_strategy_ids = sorted(s.raw["id"] for s in cluster)
+            # Inherit the weakest source verdict, not a blanket 'pass' — a
+            # pattern built partly from 'partial' source strategies isn't
+            # more trustworthy than its shakiest input (2026-07-07 review).
+            source_verdicts = {s.raw.get("quality_verdict") for s in cluster}
+            inherited_verdict = "partial" if "partial" in source_verdicts else "pass"
 
             candidates.append(
                 {
@@ -133,7 +138,7 @@ def detect_patterns_for_expert(expert_id: str) -> list[dict[str, Any]]:
                         f"Repeated pattern across {len(content_piece_ids)} pieces: "
                         f"{best.reason_given}"
                     ),
-                    "quality_verdict": "pass",  # aggregation of already quality-passed strategies
+                    "quality_verdict": inherited_verdict,
                     "scope": "in_scope",
                 }
             )

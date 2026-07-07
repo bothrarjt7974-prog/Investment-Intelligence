@@ -17,7 +17,7 @@ of their own — resolved once by the caller (src/validation/backtest.py)
 from the entity's fetch_symbol (.NS suffix), since canonical entity names
 alone don't self-identify as Indian or not.
 
-Only 5 of the 7 trigger types the strategy_extraction_v1 prompt can emit
+Only 5 of the 7 trigger types the strategy_extraction_v2 prompt can emit
 are registered here. valuation_extreme_cheap/valuation_extreme_rich need
 historical PE/valuation data, which isn't ingested anywhere (Layer 6
 fundamentals, not built) — deliberately absent rather than faked with a

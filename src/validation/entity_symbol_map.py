@@ -93,6 +93,14 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "indian_midcap": ("NIFTYMIDCAP150.NS", "yfinance"),
     "indian_smallcap": ("NIFTYSMLCAP250.NS", "yfinance"),
     "indian_equity_market": ("^NSEI", "yfinance"),
+    # "broad_equity" is strategy_extraction_v2's catch-all entity_class for
+    # general (not sector-specific) allocation strategies — "invest in
+    # individual stocks during a bull run" with no named sector. Mapped to
+    # Nifty 50 as an India-MVP default: a fair proxy (broad Indian equity
+    # exposure ≈ Nifty), not a forced one, given the current expert roster
+    # is India-focused (2026-07-07 decision log). Revisit once a US-focused
+    # expert's broad_equity strategies need a different default.
+    "broad_equity": ("^NSEI", "yfinance"),
     # --- US sector proxies (yfinance sector ETFs — free, liquid, long history) ---
     "us_tech": ("XLK", "yfinance"),
     "us_software": ("IGV", "yfinance"),

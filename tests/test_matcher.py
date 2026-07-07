@@ -28,6 +28,73 @@ def make_theme(**overrides):
 
 
 # =====================================================================
+# broad_equity FALLBACK (2026-07-07 review — real finding: 5/6 calibration
+# strategies used entity_class='broad_equity' and matched 0 themes)
+# =====================================================================
+
+
+class TestEntityClassCandidates:
+    def test_equity_theme_includes_broad_equity_fallback(self):
+        candidates = matcher._entity_class_candidates("indian_banking")
+        assert set(candidates) == {"indian_banking", "broad_equity"}
+
+    def test_broad_equity_theme_does_not_duplicate(self):
+        candidates = matcher._entity_class_candidates("broad_equity")
+        assert candidates == ["broad_equity"]
+
+    def test_macro_theme_excludes_broad_equity_fallback(self):
+        assert matcher._entity_class_candidates("inr_usd") == ["inr_usd"]
+        assert matcher._entity_class_candidates("rbi_rate") == ["rbi_rate"]
+        assert matcher._entity_class_candidates("gold") == ["gold"]
+
+    def test_unmappable_theme_excludes_broad_equity_fallback(self):
+        assert matcher._entity_class_candidates("global_liquidity") == ["global_liquidity"]
+
+
+class TestMatchThemeToStrategiesBroadEquityFallback:
+    def test_broad_equity_strategy_matched_to_sector_theme(self, monkeypatch):
+        collection = _ephemeral_collection()
+        collection.upsert(
+            ids=["s1"],
+            embeddings=[[1.0, 0.0]],
+            documents=["general equity allocation strategy"],
+            metadatas=[
+                {"entity_class": "broad_equity", "scope": "in_scope", "quality_verdict": "partial", "source_type": "expert_extracted"}
+            ],
+        )
+        monkeypatch.setattr(matcher, "get_chroma_collection", lambda: collection)
+        monkeypatch.setattr(matcher, "get_embedding", lambda text: [1.0, 0.0])
+        monkeypatch.setattr(
+            matcher, "fetch_by_id", lambda table, row_id: {"id": row_id, "expert_id": None, "backtest_status": "pending"}
+        )
+        monkeypatch.setattr(matcher, "delete_theme_strategy_matches", lambda theme_id: None)
+        monkeypatch.setattr(matcher, "insert_many", lambda table, rows: None)
+
+        matches = matcher.match_theme_to_strategies(make_theme(entity_cluster_key="indian_banking"))
+
+        assert {m["strategy_id"] for m in matches} == {"s1"}
+
+    def test_broad_equity_strategy_not_matched_to_macro_theme(self, monkeypatch):
+        collection = _ephemeral_collection()
+        collection.upsert(
+            ids=["s1"],
+            embeddings=[[1.0, 0.0]],
+            documents=["general equity allocation strategy"],
+            metadatas=[
+                {"entity_class": "broad_equity", "scope": "in_scope", "quality_verdict": "partial", "source_type": "expert_extracted"}
+            ],
+        )
+        monkeypatch.setattr(matcher, "get_chroma_collection", lambda: collection)
+        monkeypatch.setattr(matcher, "get_embedding", lambda text: [1.0, 0.0])
+        monkeypatch.setattr(matcher, "delete_theme_strategy_matches", lambda theme_id: None)
+        monkeypatch.setattr(matcher, "insert_many", lambda table, rows: None)
+
+        matches = matcher.match_theme_to_strategies(make_theme(entity_cluster_key="inr_usd"))
+
+        assert matches == []
+
+
+# =====================================================================
 # CREDIBILITY WEIGHT
 # =====================================================================
 

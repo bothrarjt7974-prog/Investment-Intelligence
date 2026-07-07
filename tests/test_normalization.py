@@ -9,16 +9,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from src.extraction.normalization import (
     Claim,
+    _parse_claim,
     compute_target_date,
     deduplicate_within_video,
     normalize_claims,
     normalize_entity,
 )
-
 
 # =====================================================================
 # ENTITY NORMALIZATION TESTS
@@ -409,5 +407,58 @@ class TestFullPipeline:
             "claim_text", "claim_type", "geography", "timeframe",
             "strength", "entity", "direction", "reason_given",
             "target_date", "target_horizon_months",
+            "is_conditional", "condition_text",
         }
         assert set(row.keys()) == expected_keys
+
+
+# =====================================================================
+# CONDITIONAL CLAIM TESTS (claim_extraction_v4, 2026-07-07 review)
+# =====================================================================
+
+
+class TestConditionalClaim:
+    """claim_extraction_v4 adds is_conditional/condition_text so the
+    validator can finally assign 'conditional_unresolved' honestly instead
+    of force-scoring an if/then claim as unconditional."""
+
+    def _raw_claim(self, **overrides):
+        base = {
+            "claim_text": "If RBI cuts, banks re-rate.",
+            "type": "sector",
+            "geography": "india",
+            "timeframe": "short",
+            "strength": "strong",
+            "entity": "indian_banking",
+            "direction": "bullish",
+            "reason_given": "Rate cuts compress funding costs faster than lending yields.",
+            "target_horizon_months": 8,
+        }
+        base.update(overrides)
+        return base
+
+    def test_conditional_claim_parsed(self):
+        raw = self._raw_claim(is_conditional=True, condition_text="RBI cuts rates.")
+        claim = _parse_claim(raw)
+        assert claim.is_conditional is True
+        assert claim.condition_text == "RBI cuts rates."
+
+    def test_defaults_to_unconditional_when_field_absent(self):
+        # v2/v3-era output never included this field — must not crash or
+        # misclassify old-shape claims.
+        claim = _parse_claim(self._raw_claim())
+        assert claim.is_conditional is False
+        assert claim.condition_text is None
+
+    def test_condition_text_ignored_when_not_conditional(self):
+        # A stray condition_text with is_conditional=False (or missing)
+        # should never leak through as a condition.
+        raw = self._raw_claim(is_conditional=False, condition_text="Should not appear")
+        claim = _parse_claim(raw)
+        assert claim.condition_text is None
+
+    def test_normalize_claims_passes_through_conditional_fields(self):
+        raw = [self._raw_claim(is_conditional=True, condition_text="RBI cuts rates.")]
+        result = normalize_claims(raw, datetime(2025, 1, 1, tzinfo=timezone.utc))
+        assert result[0]["is_conditional"] is True
+        assert result[0]["condition_text"] == "RBI cuts rates."

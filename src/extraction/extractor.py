@@ -83,7 +83,7 @@ def extract_claims_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
     }
 
     response = claude.call(
-        prompt_name="claim_extraction_v3",
+        prompt_name="claim_extraction_v4",
         content=transcript,
         variables=variables,
     )
@@ -126,6 +126,8 @@ def extract_claims_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
             "claimed_at": piece.get("published_at"),
             "target_date": claim["target_date"],
             "target_horizon_months": claim["target_horizon_months"],
+            "is_conditional": claim["is_conditional"],
+            "condition_text": claim["condition_text"],
         }
         for claim in clean_claims
     ]

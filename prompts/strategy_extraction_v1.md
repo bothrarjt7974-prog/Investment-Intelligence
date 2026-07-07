@@ -10,16 +10,15 @@
 >
 > **Model:** Sonnet (bulk)
 >
-> **STATUS: NEW, v1. REQUIRES CALIBRATION BEFORE SCALING.** This is the
-> first version of this prompt — there is no prior baseline to compare
-> against. Before pointing `run_strategy_extraction` at the full backlog,
-> run it on a 20-30 piece held-out sample (per `prompts/README.md`'s
-> "Testing a new prompt" process), manually review the output against the
-> source transcripts, and record the calibration result in
-> `docs/decision_log.md` — the same discipline `claim_extraction_v3` and
-> `quality_filter_v3` went through. Expect 0-3 strategies per piece (plan
-> §5: strategies are rarer than claims); a piece that yields 0 is a normal,
-> correct result, not a failure.
+> **STATUS: SUPERSEDED by strategy_extraction_v2 (2026-07-07).** The
+> 20-piece calibration run on this version (6 real strategies extracted,
+> see 2026-07-07 decision log entry) found that the trigger vocabulary
+> guidance's "invent a new type only if none fit" escape hatch got used
+> for real content that mapped fine onto existing types
+> (`market_cycle_shift`, `sector_cycle` — neither has a backtest detector,
+> so both dead-ended permanently). v2 closes that hatch. Kept here for
+> reference and rollback; never activate this version again without fixing
+> that defect first.
 >
 > **Version history:**
 > - v1 (initial) — schema per `technical_execution_plan_v3.docx` §5 and §14.

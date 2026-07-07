@@ -30,8 +30,40 @@ from src.db.queries import (
 )
 from src.internal.scoring import DEFAULT_SCORE, LONG_HORIZON_MAX_MONTHS
 from src.strategies.embeddings import get_chroma_collection, get_embedding
+from src.validation.entity_symbol_map import UNMAPPABLE
 
 CANDIDATE_POOL_SIZE = 20
+
+# strategy_extraction_v2's catch-all entity_class for general (not
+# sector-specific) allocation strategies. A real finding from the first
+# calibration run (2026-07-07 decision log): 5 of 6 extracted strategies
+# used it, and it never exact-matches any theme's entity_cluster_key, so
+# the matcher returned 0 candidates for every one of them. A general
+# strategy is a reasonable fallback candidate for an equity/sector theme
+# (semantic similarity + weighting still ranks it appropriately) — but
+# meaningless for a macro/commodity/FX/crypto theme (there's no "broad
+# equity way to invest" in response to a currency or rate view).
+BROAD_EQUITY_ENTITY_CLASS = "broad_equity"
+
+# Non-equity entity classes already known in ENTITY_SYMBOL_MAP — explicit,
+# curated exclusion list (same curation spirit as SECTOR_PEER_TICKERS in
+# src/fundamentals/data.py) rather than an inferred heuristic.
+_NON_EQUITY_ENTITY_CLASSES = frozenset(
+    {
+        "BTC", "ETH", "SOL",
+        "inr_usd", "jpy_usd", "dxy", "eur_usd",
+        "gold", "silver", "crude_oil",
+        "rbi_rate", "fed_rate", "india_inflation", "us_inflation", "india_gdp", "us_gdp",
+    }
+    | UNMAPPABLE
+)
+
+
+def _entity_class_candidates(entity_cluster_key: str) -> list[str]:
+    """Which entity_class values are acceptable matches for this theme."""
+    if entity_cluster_key in _NON_EQUITY_ENTITY_CLASSES:
+        return [entity_cluster_key]
+    return list({entity_cluster_key, BROAD_EQUITY_ENTITY_CLASS})
 
 # CFA/institutional strategies have no expert to derive credibility from —
 # the plan says these "carry high default weight" by construction (they're
@@ -96,7 +128,7 @@ def match_theme_to_strategies(theme: dict[str, Any], top_n: int = 5) -> list[dic
 
     where = {
         "$and": [
-            {"entity_class": theme["entity_cluster_key"]},
+            {"entity_class": {"$in": _entity_class_candidates(theme["entity_cluster_key"])}},
             {"scope": "in_scope"},
             {"quality_verdict": {"$in": ["pass", "partial"]}},
         ]

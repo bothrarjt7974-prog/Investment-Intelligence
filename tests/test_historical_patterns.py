@@ -90,6 +90,43 @@ class TestDetectPatternsForExpert:
         assert pattern["entity_class"] == "indian_banking"
         assert pattern["quality_verdict"] == "pass"
 
+    def test_pattern_inherits_partial_when_any_source_is_partial(self, monkeypatch):
+        # 2026-07-07 review: a pattern built partly from 'partial' source
+        # strategies isn't more trustworthy than its shakiest input —
+        # must not blanket-inherit 'pass'.
+        rows = [
+            make_row(id="s1", content_piece_id="p1", quality_verdict="pass"),
+            make_row(id="s2", content_piece_id="p2", quality_verdict="partial"),
+            make_row(
+                id="s3",
+                content_piece_id="p3",
+                quality_verdict="pass",
+                strategy_text="Allocate 40 percent to PSU banks weighted by market cap",
+            ),
+        ]
+        monkeypatch.setattr(historical_patterns, "fetch_strategies_by_expert", lambda expert_id: rows)
+
+        patterns = detect_patterns_for_expert("expert-1")
+
+        assert patterns[0]["quality_verdict"] == "partial"
+
+    def test_pattern_stays_pass_when_all_sources_pass(self, monkeypatch):
+        rows = [
+            make_row(id="s1", content_piece_id="p1", quality_verdict="pass"),
+            make_row(id="s2", content_piece_id="p2", quality_verdict="pass"),
+            make_row(
+                id="s3",
+                content_piece_id="p3",
+                quality_verdict="pass",
+                strategy_text="Allocate 40 percent to PSU banks weighted by market cap",
+            ),
+        ]
+        monkeypatch.setattr(historical_patterns, "fetch_strategies_by_expert", lambda expert_id: rows)
+
+        patterns = detect_patterns_for_expert("expert-1")
+
+        assert patterns[0]["quality_verdict"] == "pass"
+
     def test_fewer_than_minimum_pieces_no_pattern(self, monkeypatch):
         rows = [
             make_row(id="s1", content_piece_id="p1"),

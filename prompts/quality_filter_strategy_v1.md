@@ -12,7 +12,7 @@
 > **Model:** Sonnet (bulk)
 >
 > **STATUS: NEW, v1. REQUIRES CALIBRATION BEFORE SCALING.** Run on a
-> 20-30 strategy held-out sample (once `strategy_extraction_v1` has
+> 20-30 strategy held-out sample (once `strategy_extraction_v2` has
 > produced real rows to screen) before trusting the pass rate at scale,
 > same process as `quality_filter_v3`. No baseline distribution exists
 > yet — record the first calibration result in `docs/decision_log.md`.

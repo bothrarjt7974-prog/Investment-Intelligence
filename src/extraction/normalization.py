@@ -247,6 +247,8 @@ class Claim:
     reason_given: str
     entity: str | None = None
     target_horizon_months: int | None = None
+    is_conditional: bool = False
+    condition_text: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)  # original LLM payload
 
 
@@ -478,6 +480,14 @@ def _parse_claim(raw: dict[str, Any]) -> Claim | None:
         except (TypeError, ValueError):
             horizon = None
 
+    # is_conditional/condition_text: new in claim_extraction_v4. Absent
+    # (v2/v3 output) defaults to False/None — those claims are treated as
+    # unconditional, same behavior as before v4 existed.
+    is_conditional = bool(raw.get("is_conditional", False))
+    condition_text = raw.get("condition_text") if is_conditional else None
+    if condition_text is not None:
+        condition_text = str(condition_text).strip() or None
+
     return Claim(
         claim_text=str(raw["claim_text"]).strip(),
         claim_type=str(raw_type).strip().lower(),
@@ -488,6 +498,8 @@ def _parse_claim(raw: dict[str, Any]) -> Claim | None:
         reason_given=str(raw.get("reason_given", "")).strip(),
         entity=normalize_entity(raw.get("entity")),
         target_horizon_months=horizon,
+        is_conditional=is_conditional,
+        condition_text=condition_text,
         raw=raw,
     )
 
@@ -519,7 +531,8 @@ def normalize_claims(
         List of dicts with these keys ready for DB insert:
             claim_text, claim_type, geography, timeframe, strength,
             entity, direction, reason_given, target_date,
-            target_horizon_months (None if not set)
+            target_horizon_months (None if not set), is_conditional,
+            condition_text (None unless is_conditional)
     """
     if claimed_at.tzinfo is None:
         claimed_at = claimed_at.replace(tzinfo=timezone.utc)
@@ -559,6 +572,8 @@ def normalize_claims(
             "reason_given": c.reason_given,
             "target_date": target_date.date().isoformat() if target_date else None,
             "target_horizon_months": c.target_horizon_months,
+            "is_conditional": c.is_conditional,
+            "condition_text": c.condition_text,
         })
 
     logger.info(

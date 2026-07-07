@@ -185,6 +185,25 @@ class TestPriceTargetEvaluation:
 
 
 class TestNonTestableClaims:
+    def test_conditional_claim_is_unresolved_not_force_scored(self, monkeypatch):
+        # claim_extraction_v4: an if/then claim must never be silently
+        # scored as if the condition already held.
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("A conditional claim must never reach price lookups")
+
+        monkeypatch.setattr(validator, "price_on", fail_if_called)
+        monkeypatch.setattr(validator, "price_series", fail_if_called)
+
+        result = validator.validate_one_claim(make_claim(is_conditional=True))
+
+        assert result["verification_status"] == "conditional_unresolved"
+
+    def test_missing_is_conditional_field_defaults_unconditional(self, monkeypatch):
+        # Pre-v4 claims never had this field — must take the normal path.
+        _mock_prices(monkeypatch, price_at_claim=100.0, price_at_target=110.0)
+        result = validator.validate_one_claim(make_claim())
+        assert result["verification_status"] != "conditional_unresolved"
+
     def test_opinion_strength(self, monkeypatch):
         result = validator.validate_one_claim(make_claim(strength="opinion"))
         assert result["verification_status"] == "opinion_only"

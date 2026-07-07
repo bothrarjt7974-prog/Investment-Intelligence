@@ -119,7 +119,7 @@ def extract_strategies_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
     }
 
     response = claude.call(
-        prompt_name="strategy_extraction_v1",
+        prompt_name="strategy_extraction_v2",
         content=transcript,
         variables=variables,
     )

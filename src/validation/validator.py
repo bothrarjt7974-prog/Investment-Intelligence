@@ -191,11 +191,15 @@ def validate_one_claim(claim: dict[str, Any]) -> dict[str, Any] | None:
     claimed_at = claim.get("claimed_at")
     target_date = claim.get("target_date")
 
-    # Known limitation: the schema and technical plan define a
-    # 'conditional_unresolved' status ("if X happens, then Y") but nothing
-    # assigns it — detecting conditionality reliably needs the extraction
-    # prompt to tag the condition (Phase B, claim_extraction_v3+). Until
-    # then conditional claims are scored as if unconditional.
+    # claim_extraction_v4 tags is_conditional/condition_text — a claim like
+    # "if RBI cuts, banks re-rate" can't be honestly scored against a price
+    # series without knowing whether the condition itself resolved, which
+    # we don't track. Force-scoring it as unconditional (the pre-v4
+    # behavior) would produce false negatives whenever the condition never
+    # materialized. Claims from v2/v3-era extraction default is_conditional
+    # to False (see normalization._parse_claim) and take the normal path.
+    if claim.get("is_conditional"):
+        return {"verification_status": "conditional_unresolved", "verified_at": now}
 
     # (a) opinions and horizon-less claims aren't testable against a price series.
     if strength == "opinion" or target_horizon_months is None:

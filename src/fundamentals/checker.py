@@ -23,6 +23,7 @@ from src.fundamentals.data import (
     check_balance_sheet_red_flag,
     compute_sector_relative_pe,
     fetch_fundamentals_snapshot,
+    fetch_index_valuation,
     resolve_target_instruments,
 )
 from src.llm.claude_client import claude
@@ -97,6 +98,31 @@ def check_one_theme(theme: dict[str, Any]) -> dict[str, Any]:
     Run the fundamentals check for one theme. Returns the update dict to
     write to the themes row.
     """
+    # Equity-index themes get a real, applicable check: the index's
+    # tracker-ETF trailing PE against a documented fair band —
+    # deterministic verdict, no LLM needed at index granularity. This
+    # replaces the bypass-with-note for the indices that have a proxy;
+    # FX/commodity/crypto entities still have no fundamentals analog and
+    # fall through to the existing paths.
+    index_valuation = fetch_index_valuation(theme.get("entity_cluster_key"))
+    if index_valuation is not None:
+        position = index_valuation["position"]
+        verdict = "downgrade" if position == "above" else "pass"
+        return _result(
+            verdict,
+            (
+                f"Index-level valuation via {index_valuation['proxy']}: trailing PE "
+                f"{index_valuation['trailing_pe']} is {position} the fair band "
+                f"({index_valuation['band_low']}-{index_valuation['band_high']}). "
+                + (
+                    "Rich valuation warrants caution on fresh exposure — downgraded, not vetoed."
+                    if position == "above"
+                    else "Within/below the fair band — no valuation objection."
+                )
+            ),
+            {"index_valuation": index_valuation},
+        )
+
     instrument_symbols = resolve_target_instruments(theme)
     if not instrument_symbols:
         return _result(

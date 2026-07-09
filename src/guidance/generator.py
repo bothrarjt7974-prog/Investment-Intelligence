@@ -93,8 +93,21 @@ def build_attribution(
     if strategy.get("backtest_status") == "complete":
         backtest_summary = strategy.get("backtest_record")
 
+    fundamentals_verdict = theme.get("fundamentals_verdict")
+    fundamentals_note = None
+    if fundamentals_verdict not in ("pass", "downgrade"):
+        # Only reachable for index/macro entities (the eligibility gate
+        # blocks everything else) — record the policy explicitly so the
+        # SEBI trail shows WHY no company-fundamentals verdict backs this.
+        fundamentals_note = (
+            "Company-level fundamentals check not applicable to index/"
+            "macro-level entities; guidance rests on expert convergence "
+            "and strategy match only (2026-07-09 policy)."
+        )
+
     return {
         "direction": theme.get("supporting_experts", []),
+        "fundamentals": {"verdict": fundamentals_verdict, "note": fundamentals_note},
         "execution": {
             "strategy_id": strategy["id"],
             "source_type": strategy.get("source_type"),

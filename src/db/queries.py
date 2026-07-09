@@ -269,16 +269,27 @@ def fetch_synthesizable_claims(window_days: int = 90) -> list[dict[str, Any]]:
     (pass OR partial, same promoted-partial convention as elsewhere),
     long-horizon (>= 12 months — the plan's "long-horizon claims only" bar
     for structural synthesis, stricter than claims.scope's 6-month
-    out_of_scope threshold), with a non-null entity to cluster by, claimed
-    within the last `window_days` days.
+    out_of_scope threshold), with a non-null entity to cluster by, and a
+    thesis that is STILL LIVE — target_date in the future.
+
+    2026-07-09 change (see decision log): the old filter required
+    claimed_at within `window_days` (90), which discarded 69% of
+    otherwise-eligible claims — a 3-year thesis stated 4 months ago is
+    still live for a long-horizon advisory; recency-of-utterance is a
+    trading-system notion. A 3-year claimed_at backstop remains so a
+    stale decade-horizon call can't headline fresh themes forever.
+    `window_days` is kept in the signature for callers but no longer
+    drives the recency cut.
     """
-    earliest = pendulum.now("UTC").subtract(days=window_days).to_iso8601_string()
+    today = pendulum.now("UTC").to_date_string()
+    earliest = pendulum.now("UTC").subtract(years=3).to_iso8601_string()
     response = (
         supabase.table("claims")
         .select("*")
         .in_("quality_verdict", ["pass", "partial"])
         .gte("target_horizon_months", 12)
         .not_.is_("entity", "null")
+        .gte("target_date", today)
         .gte("claimed_at", earliest)
         .execute()
     )
@@ -365,19 +376,30 @@ def fetch_existing_framework_source_names() -> set[str]:
 
 def fetch_themes_ready_for_matching(limit: int = 100) -> list[dict[str, Any]]:
     """
-    Return active themes that cleared fundamentals (pass or downgrade —
-    reject/not_applicable/insufficient_data themes don't get matched to
-    execution strategies). Input to src/strategies/matcher.py.
+    Return active themes eligible for strategy matching: fundamentals
+    pass/downgrade, OR index/macro entities where company fundamentals
+    categorically don't apply (not_applicable/insufficient_data doesn't
+    block those — founder policy, 2026-07-09 decision log; the entity
+    allowlist lives in src/guidance/eligibility.py). reject always
+    excludes. Input to src/strategies/matcher.py.
     """
+    from src.guidance.eligibility import fundamentals_not_applicable_but_eligible
+
     response = (
         supabase.table("themes")
         .select("*")
         .eq("status", "active")
-        .in_("fundamentals_verdict", ["pass", "downgrade"])
+        .in_("fundamentals_verdict", ["pass", "downgrade", "not_applicable", "insufficient_data"])
         .limit(limit)
         .execute()
     )
-    return response.data or []
+    themes = response.data or []
+    return [
+        t
+        for t in themes
+        if t.get("fundamentals_verdict") in ("pass", "downgrade")
+        or fundamentals_not_applicable_but_eligible(t)
+    ]
 
 
 def delete_theme_strategy_matches(theme_id: str) -> None:

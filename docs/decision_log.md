@@ -5,6 +5,92 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-09 — Synthesis eligibility: "thesis still live" replaces the 90-day recency window
+
+**Decision:** `fetch_synthesizable_claims` now includes any quality-passed
+long-horizon claim whose **target_date is in the future** (with a 3-year
+claimed_at backstop), instead of requiring claimed_at within the last 90
+days.
+
+**Context:** The user observed "we have so much data but nothing passes."
+Funnel audit: 725 claims → 631 quality-passed (87% — screening was NOT
+the problem) → 322 long-horizon → **only 100 within the 90-day window**.
+69% of eligible claims were discarded because they were *spoken* more
+than 90 days ago, even though their theses run years into the future.
+Recency-of-utterance is a trading-system notion; thesis liveness is the
+long-horizon advisory notion.
+
+**Verified live:** synthesizable claims 100 → 179 across 8 experts;
+medium-conviction themes 5 → 7 (crypto_sector, global_liquidity,
+crude_oil newly converged); us_tech_ai strengthened to **5 experts**
+(Akshat's and Shankar Nath's older claims joined). Expired-target claims
+correctly stay out — they belong to the validator, not fresh themes.
+
+**Revisit:** the 3-year backstop, once credibility scores are real
+(a high-credibility expert's older structural calls may deserve longer).
+
+---
+
+## 2026-07-09 — Index-level valuation check built: equity indices now face a real gate, not a bypass
+
+**Decision:** `fetch_index_valuation` (src/fundamentals/data.py) checks
+equity-index themes against their tracker-ETF trailing PE vs a
+documented fair band (`INDEX_PE_PROXIES` — SPY/QQQ/DIA/IWM/NIFTYBEES;
+indices themselves expose no PE via yfinance, ETFs verified to). Verdict
+is deterministic, no LLM: within/below band → pass; above → downgrade
+(rich = caution, never veto — an index has no balance-sheet-disaster
+analog, so reject is never produced). Bands are v1 placeholders anchored
+to long-run medians, documented for calibration.
+
+**Context:** Same-day follow-up to the index/macro carve-out below —
+user asked "if there's no fundamentals data, how are we doing
+everything?" The honest answer was "bypass with a note"; this closes
+that for the indices where a real check IS computable. FX, commodities
+and crypto still have no fundamentals analog and keep the
+carve-out-with-note.
+
+**Verified live:** nifty50 → pass (NIFTYBEES PE 21.55, band 17-24);
+sp500 → downgrade (SPY PE 26.81, above 16-24) — a genuinely
+informative caution consistent with the theme's own concentration
+thesis.
+
+**Revisit:** band values after backfill/calibration; add CAPE-style or
+own-history bands when historical index PE data is worth paying for.
+
+---
+
+## 2026-07-09 — Index/macro themes: not_applicable fundamentals no longer blocks guidance (founder decision)
+
+**Decision:** For a defined allowlist of index/macro/commodity/FX cluster
+keys (`INDEX_MACRO_ENTITIES` in `src/guidance/eligibility.py`),
+fundamentals verdicts `not_applicable`/`insufficient_data` do not block
+matching or guidance. `reject` always blocks. Sector themes with
+constituent stocks (indian_banking, us_tech_ai...) still require
+pass/downgrade. Every guidance event generated under this carve-out
+carries an explicit note in `attribution.fundamentals`: company-level
+fundamentals categorically don't exist for these entities — the check
+was unanswerable, not failed.
+
+**Context:** After the synthesis-window fix, 5 of 7 medium-conviction
+themes (nifty50, sp500, inr_usd, global_liquidity, crude_oil/crypto)
+were silently barred from ever producing guidance because a
+balance-sheet check can't apply to an index. Founder chose the carve-out
+over (a) keeping them blocked or (b) building index-level valuation
+checks first.
+
+**Verified live:** first index/macro guidance events generated —
+honest MAINTAINs (nifty50 for an already-all-Indian-equity portfolio;
+crypto with no position and split expert views), each with the policy
+note in the attribution trail.
+
+**What would change this:** building the index-level sanity check
+(index PE vs history, currency PPP bands) — at which point these
+entities move back behind a real, applicable gate.
+
+**Revisit:** before beta users; this is the loosest gate in the system.
+
+---
+
 ## 2026-07-09 — Deterministic sizing gate: code now enforces "never let the LLM invent position sizes"
 
 **Decision:** Add `src/guidance/sizing.py` — after every guidance LLM

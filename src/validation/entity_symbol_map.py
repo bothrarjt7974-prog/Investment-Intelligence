@@ -102,6 +102,11 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "VISHNU": ("VISHNU.NS", "yfinance"),
     # Nagarro SE trades on Frankfurt, not NSE — Indian-founded, German-listed
     "NAGARRO": ("NA9.DE", "yfinance"),
+    "SWIGGY": ("SWIGGY.NS", "yfinance"),
+    "BSE": ("BSE.NS", "yfinance"),
+    "GREENLAM": ("GREENLAM.NS", "yfinance"),
+    "CGPOWER": ("CGPOWER.NS", "yfinance"),
+    "PATELENG": ("PATELENG.NS", "yfinance"),
     # --- US stocks (yfinance, bare ticker) ---
     "AAPL": ("AAPL", "yfinance"),
     "MSFT": ("MSFT", "yfinance"),
@@ -114,6 +119,14 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "AMD": ("AMD", "yfinance"),
     "TSM": ("TSM", "yfinance"),
     "MSTR": ("MSTR", "yfinance"),
+    "JPM": ("JPM", "yfinance"),
+    "XOM": ("XOM", "yfinance"),
+    "CVX": ("CVX", "yfinance"),
+    "COST": ("COST", "yfinance"),
+    "FDX": ("FDX", "yfinance"),
+    "MCDONALDS": ("MCD", "yfinance"),
+    "MCD": ("MCD", "yfinance"),
+    "KFC": ("YUM", "yfinance"),  # KFC is a Yum! Brands chain, not separately listed
     # Samsung Electronics, Korea Exchange
     "SAMSUNG": ("005930.KS", "yfinance"),
     # --- Crypto (yfinance) ---
@@ -224,6 +237,7 @@ PRIVATE_ENTITIES: frozenset[str] = frozenset(
         "ZEPTO",
         "NSE",  # NSE India itself — unlisted as of 2026
         "NPS",  # pension product, not a company
+        "PDVSA",  # Venezuelan state oil company — no listed equity
     }
 )
 

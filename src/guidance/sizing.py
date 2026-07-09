@@ -71,6 +71,16 @@ def _allowed_entities(
         allowed.add(str(strategy["entity_class"]).lower())
     for holding in holdings or []:
         allowed.add(str(holding.get("entity") or "").lower())
+    # The strategy's own prose prescribes asset classes ("40% to
+    # long-term government bonds", "60% equities") — an instrument that
+    # follows the strategy's stated allocation is grounded BY that
+    # strategy, not invented. Tokenize its text fields; keep only
+    # meaningful words (4+ chars) so generic fragments can't accidentally
+    # ground a truly invented ticker.
+    for field in ("strategy_text", "allocation_rule", "position_sizing", "exit_conditions"):
+        value = strategy.get(field)
+        if value:
+            allowed |= {t for t in re.split(r"[^a-z0-9&-]+", str(value).lower()) if len(t) >= 4}
     allowed.discard("")
     return allowed
 
@@ -85,7 +95,14 @@ def _entity_is_grounded(entity: str, allowed: set[str]) -> bool:
     lowered = entity.lower()
     if lowered in allowed:
         return True
-    tokens = set(re.split(r"[^a-z0-9_&-]+", lowered)) - {""}
+    # Two tokenizations: keeping underscores (matches canonical entity
+    # names like us_tech_ai in the allowed set) and splitting them
+    # (matches strategy-prose words — 'long_term_govt_bonds' must ground
+    # against a strategy that wrote "long-term government bonds").
+    tokens = (
+        set(re.split(r"[^a-z0-9_&-]+", lowered))
+        | set(re.split(r"[^a-z0-9&-]+", lowered))
+    ) - {""}
     return bool(tokens & allowed)
 
 

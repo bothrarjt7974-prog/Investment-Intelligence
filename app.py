@@ -266,13 +266,26 @@ elif page == "🧭 Guidance":
         for g in real:
             change = g.get("target_allocation_change") or {}
             icon = GUIDANCE_ICON.get(g.get("guidance_type"), "🧭")
-            title = f"{icon} {g.get('guidance_type', '?').replace('_', ' ').title()} — {change.get('entity', '?')}"
+            # MAINTAIN carries no allocation change by design — name the
+            # card after its theme instead of showing empty percentages.
+            entity_label = change.get("entity")
+            if not entity_label and g.get("theme_id"):
+                theme_row = fetch_by_id("themes", g["theme_id"])
+                entity_label = (theme_row or {}).get("entity_cluster_key")
+            title = f"{icon} {g.get('guidance_type', '?').replace('_', ' ').title()} — {entity_label or '?'}"
             with st.container(border=True):
                 st.markdown(f"### {title}")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("From", f"{change.get('from_pct', '—')}%")
-                c2.metric("To", f"{change.get('to_pct', '—')}%")
-                c3.metric("Status", g.get("status", "active"))
+                if change.get("to_pct") is not None:
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("From", f"{change.get('from_pct', '—')}%")
+                    c2.metric("To", f"{change.get('to_pct', '—')}%")
+                    c3.metric("Status", g.get("status", "active"))
+                else:
+                    st.info(
+                        "No allocation change — the system judged the current "
+                        "position appropriately sized for this theme. Holding "
+                        "steady is a deliberate recommendation, not missing data."
+                    )
 
                 if g.get("specific_instruments"):
                     st.markdown("**Instruments**")

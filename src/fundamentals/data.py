@@ -61,6 +61,29 @@ BALANCE_SHEET_MIN_CURRENT_RATIO = 1.0
 # 1.5x sector-peer average, the closest computable analogue (see decision log).
 SECTOR_RELATIVE_PE_RED_FLAG = 1.5
 
+# --- Index-level valuation check (2026-07-09, closes the "index themes
+# bypass fundamentals" gap for equity indices) ---
+# Indices themselves expose no PE via yfinance (verified: ^NSEI/^GSPC
+# return None), but their tracker ETFs DO (verified: SPY 26.8, QQQ 31.6,
+# NIFTYBEES 21.5 on 2026-07-09). Each entity maps to (proxy_etf,
+# fair_band_low, fair_band_high) — trailing-PE bands are v1 placeholders
+# anchored to long-run medians, documented for calibration like every
+# other threshold here. Verdict is deterministic: within/below band →
+# pass, above band → downgrade (rich valuations warrant caution, not a
+# veto — there is no balance-sheet-disaster analog for an index, so
+# reject is never produced here).
+INDEX_PE_PROXIES: dict[str, tuple[str, float, float]] = {
+    "sp500": ("SPY", 16.0, 24.0),
+    "us_equities": ("SPY", 16.0, 24.0),
+    "nasdaq": ("QQQ", 20.0, 30.0),
+    "qqq": ("QQQ", 20.0, 30.0),
+    "dow": ("DIA", 15.0, 22.0),
+    "us_smallcap": ("IWM", 14.0, 22.0),
+    "nifty50": ("NIFTYBEES.NS", 17.0, 24.0),
+    "indian_equity_market": ("NIFTYBEES.NS", 17.0, 24.0),
+    "broad_equity": ("NIFTYBEES.NS", 17.0, 24.0),
+}
+
 
 def _looks_like_ticker(entity: str | None) -> bool:
     """Same signal normalize_entity uses to distinguish tickers (RELIANCE,
@@ -129,6 +152,43 @@ def fetch_fundamentals_snapshot(canonical_symbol: str) -> dict[str, Any] | None:
     if all(value is None for value in snapshot.values()):
         return None
     return snapshot
+
+
+def fetch_index_valuation(entity_cluster_key: str | None) -> dict[str, Any] | None:
+    """
+    Index-level valuation snapshot via the entity's tracker-ETF proxy.
+    Returns {"proxy", "trailing_pe", "band_low", "band_high", "position"}
+    (position: 'below' | 'within' | 'above') or None when the entity has
+    no proxy mapping or the fetch fails — caller falls back to the
+    existing not_applicable path.
+    """
+    if not entity_cluster_key or entity_cluster_key not in INDEX_PE_PROXIES:
+        return None
+
+    proxy, band_low, band_high = INDEX_PE_PROXIES[entity_cluster_key]
+    try:
+        trailing_pe = yf.Ticker(proxy).info.get("trailingPE")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Index valuation fetch failed for '{entity_cluster_key}' ({proxy}): {exc}")
+        return None
+
+    if trailing_pe is None:
+        return None
+
+    if trailing_pe < band_low:
+        position = "below"
+    elif trailing_pe > band_high:
+        position = "above"
+    else:
+        position = "within"
+
+    return {
+        "proxy": proxy,
+        "trailing_pe": round(float(trailing_pe), 2),
+        "band_low": band_low,
+        "band_high": band_high,
+        "position": position,
+    }
 
 
 def compute_sector_relative_pe(entity_cluster_key: str | None, trailing_pe: float | None) -> float | None:

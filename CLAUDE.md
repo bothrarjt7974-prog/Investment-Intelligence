@@ -183,6 +183,19 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
   `grounded_query_v1`. `guidance_generation_v1` has now run for real but
   is still iteration ~1 of a budgeted 15-25 — founder line-by-line
   review required before any output is acted on.
+- **Funnel fixes 2026-07-09** (see decision log): synthesis now takes
+  any quality-passed long-horizon claim whose **target_date is still in
+  the future** (was: claimed within 90 days — that discarded 69% of
+  eligible claims); synthesizable input 100 → 179 claims, medium themes
+  5 → 7, us_tech_ai at 5 experts. Index/macro entities
+  (`INDEX_MACRO_ENTITIES` in `src/guidance/eligibility.py`) are
+  guidance-eligible with `not_applicable` fundamentals + an explicit
+  attribution note — company fundamentals categorically don't exist for
+  an index; `reject` still always blocks; sector themes still need
+  pass/downgrade. Equity indices now get a REAL check
+  (`fetch_index_valuation`, src/fundamentals/data.py): tracker-ETF
+  trailing PE vs documented fair bands (deterministic pass/downgrade,
+  never reject) — the carve-out now only covers FX/commodity/crypto.
 - **Guardrails added 2026-07-09** (see decision log): deterministic
   sizing gate (`src/guidance/sizing.py` — LLM sizing clamped to the
   strategy's allocation_rule or a risk-profile cap table; invented

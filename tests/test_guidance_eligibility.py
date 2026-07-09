@@ -61,6 +61,39 @@ class TestCheckThemeEligible:
         )
         assert eligible is False
 
+    def test_index_entity_not_applicable_is_eligible(self):
+        # Founder policy 2026-07-09: company fundamentals categorically
+        # don't exist for index/macro entities — not_applicable doesn't
+        # block them.
+        eligible, reason = check_theme_eligible(
+            make_theme(entity_cluster_key="nifty50", fundamentals_verdict="not_applicable"),
+            make_strategy(),
+        )
+        assert eligible is True
+
+    def test_index_entity_insufficient_data_is_eligible(self):
+        eligible, _ = check_theme_eligible(
+            make_theme(entity_cluster_key="crude_oil", fundamentals_verdict="insufficient_data"),
+            make_strategy(),
+        )
+        assert eligible is True
+
+    def test_stock_sector_entity_not_applicable_still_refused(self):
+        # Sector themes have constituent stocks — they must earn
+        # pass/downgrade; the index/macro carve-out never applies.
+        eligible, _ = check_theme_eligible(
+            make_theme(entity_cluster_key="indian_banking", fundamentals_verdict="not_applicable"),
+            make_strategy(),
+        )
+        assert eligible is False
+
+    def test_index_entity_reject_still_refused(self):
+        eligible, _ = check_theme_eligible(
+            make_theme(entity_cluster_key="nifty50", fundamentals_verdict="reject"),
+            make_strategy(),
+        )
+        assert eligible is False
+
     def test_downgrade_fundamentals_eligible(self):
         eligible, reason = check_theme_eligible(
             make_theme(fundamentals_verdict="downgrade"), make_strategy()

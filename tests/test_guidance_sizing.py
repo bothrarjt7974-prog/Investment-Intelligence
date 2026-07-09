@@ -84,6 +84,30 @@ class TestInstrumentGrounding:
         )
         assert source == "reduction_not_capped"
 
+    def test_strategy_prescribed_asset_class_is_grounded(self):
+        # The matched strategy's own text prescribes bonds — following its
+        # prescription is grounded, not invention (live failure 2026-07-09:
+        # a REBALANCE into 'long_term_govt_bonds' was wrongly rejected
+        # under an all-weather allocation strategy that names them).
+        strategy = make_strategy(
+            strategy_text="Allocate 30% to equities, 40% to long-term government bonds, 15% to intermediate bonds",
+        )
+        payload = make_payload(
+            guidance_type="REBALANCE",
+            target_allocation_change={"entity": "equity_total", "from_pct": 96.9, "to_pct": 30.0},
+            specific_instruments=[{"entity": "long_term_govt_bonds", "target_pct": 40.0}],
+        )
+        payload, source = apply_sizing_gate(payload, make_theme(), strategy, "moderate")
+        assert source == "reduction_not_capped"
+
+    def test_truly_invented_ticker_still_rejected(self):
+        strategy = make_strategy(strategy_text="Allocate 40% to long-term government bonds")
+        payload = make_payload(
+            specific_instruments=[{"entity": "DOGECOIN", "target_pct": 5.0}]
+        )
+        with pytest.raises(InventedInstrumentError):
+            apply_sizing_gate(payload, make_theme(), strategy, "moderate")
+
     def test_composite_label_grounded_by_token(self):
         payload = make_payload(
             specific_instruments=[

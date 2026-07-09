@@ -65,6 +65,44 @@ class TestParseFundamentalsResponse:
 # =====================================================================
 
 
+class TestIndexValuationBranch:
+    def test_index_within_band_passes_deterministically(self, monkeypatch):
+        monkeypatch.setattr(
+            checker,
+            "fetch_index_valuation",
+            lambda key: {"proxy": "NIFTYBEES.NS", "trailing_pe": 21.5, "band_low": 17.0, "band_high": 24.0, "position": "within"},
+        )
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("LLM must not be called for index-level checks")
+
+        monkeypatch.setattr(checker.claude, "call", fail_if_called)
+
+        result = check_one_theme(make_theme(entity_cluster_key="nifty50"))
+
+        assert result["fundamentals_verdict"] == "pass"
+        assert "21.5" in result["fundamentals_notes"]
+
+    def test_index_above_band_downgrades(self, monkeypatch):
+        monkeypatch.setattr(
+            checker,
+            "fetch_index_valuation",
+            lambda key: {"proxy": "SPY", "trailing_pe": 26.8, "band_low": 16.0, "band_high": 24.0, "position": "above"},
+        )
+
+        result = check_one_theme(make_theme(entity_cluster_key="sp500"))
+
+        assert result["fundamentals_verdict"] == "downgrade"
+
+    def test_fetch_failure_falls_through_to_existing_paths(self, monkeypatch):
+        monkeypatch.setattr(checker, "fetch_index_valuation", lambda key: None)
+        monkeypatch.setattr(checker, "resolve_target_instruments", lambda theme: [])
+
+        result = check_one_theme(make_theme(entity_cluster_key="sp500"))
+
+        assert result["fundamentals_verdict"] == "not_applicable"
+
+
 class TestCheckOneTheme:
     def test_not_applicable_when_no_instruments_resolved(self, monkeypatch):
         monkeypatch.setattr(checker, "resolve_target_instruments", lambda theme: [])

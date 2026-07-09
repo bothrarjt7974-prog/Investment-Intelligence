@@ -20,6 +20,59 @@ from src.db.queries import fetch_active_guidance
 ELIGIBLE_CONVICTION_LEVELS = ("medium", "high")
 ELIGIBLE_FUNDAMENTALS_VERDICTS = ("pass", "downgrade")
 
+# Index / macro / commodity / FX cluster keys where company-level
+# fundamentals categorically don't exist — a balance-sheet check on
+# nifty50 or crude oil is meaningless, not failed. For these entities
+# (and ONLY these), not_applicable/insufficient_data fundamentals
+# verdicts don't block guidance; the guidance record carries an explicit
+# note instead (founder policy decision, 2026-07-09 decision log).
+# Sector themes (indian_banking, us_tech_ai...) are NOT here — they have
+# constituent stocks and must still earn pass/downgrade.
+INDEX_MACRO_ENTITIES = frozenset(
+    {
+        "nifty50",
+        "nifty500",
+        "indian_smallcap",
+        "indian_midcap",
+        "indian_equity_market",
+        "sp500",
+        "nasdaq",
+        "dow",
+        "qqq",
+        "us_equities",
+        "us_smallcap",
+        "broad_equity",
+        "inr_usd",
+        "dxy",
+        "eur_usd",
+        "jpy_usd",
+        "gold",
+        "silver",
+        "crude_oil",
+        "crypto_sector",
+        "BTC",
+        "ETH",
+        "global_liquidity",
+        "us_treasuries",
+        "fed_rate",
+        "rbi_rate",
+        "india_inflation",
+        "us_inflation",
+        "india_gdp",
+        "us_gdp",
+    }
+)
+
+
+def fundamentals_not_applicable_but_eligible(theme: dict[str, Any]) -> bool:
+    """True when this theme's fundamentals verdict doesn't block guidance
+    because the entity is index/macro-level (no company fundamentals
+    exist to check)."""
+    return (
+        theme.get("entity_cluster_key") in INDEX_MACRO_ENTITIES
+        and theme.get("fundamentals_verdict") in ("not_applicable", "insufficient_data")
+    )
+
 # Simple percentage-of-portfolio heuristic (v1 — not LLM-judged): if the
 # theme's entity/instruments already represent this much of the
 # portfolio's value, treat it as "already aligned" rather than generating
@@ -43,10 +96,11 @@ def check_theme_eligible(
         )
 
     fundamentals_verdict = theme.get("fundamentals_verdict")
-    if fundamentals_verdict not in ELIGIBLE_FUNDAMENTALS_VERDICTS:
+    if fundamentals_verdict not in ELIGIBLE_FUNDAMENTALS_VERDICTS and not fundamentals_not_applicable_but_eligible(theme):
         return False, (
             f"theme fundamentals_verdict is '{fundamentals_verdict}', "
-            f"requires pass or downgrade"
+            f"requires pass or downgrade (or an index/macro entity where "
+            f"company fundamentals don't apply)"
         )
 
     if matched_strategy is None:

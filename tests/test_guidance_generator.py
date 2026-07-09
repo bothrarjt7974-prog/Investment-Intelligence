@@ -23,7 +23,9 @@ def make_theme(**overrides):
         "entity_cluster_key": "indian_banking",
         "conviction_level": "high",
         "fundamentals_verdict": "pass",
-        "instruments_mentioned": [],
+        # HDFCBANK must be grounded here — the sizing gate rejects any
+        # response instrument not traceable to the theme/strategy inputs.
+        "instruments_mentioned": ["HDFCBANK"],
         "summary_thesis": "Banking will re-rate",
         "cycle_position": "early bull",
         "supporting_experts": [{"expert_id": "e1", "expert_name": "Akshat"}],

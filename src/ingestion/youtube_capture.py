@@ -58,8 +58,20 @@ class YouTubeAutoCaptionCapture(TranscriptCapture):
 
             try:
                 entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
+                language = "en"
             except NoTranscriptFound:
-                entries = api.fetch(video_id)
+                # No English track. `api.fetch(video_id)` with no `languages`
+                # arg looks like a fallback but silently defaults to
+                # `languages=('en',)` internally — identical to the attempt
+                # above, not a real fallback. Many Indian finance channels
+                # only have Hindi/Hinglish auto-captions; list what's
+                # actually available and take the first track rather than
+                # dropping the video. Claude reads multilingual transcripts
+                # fine downstream.
+                transcript_list = api.list(video_id)
+                transcript = next(iter(transcript_list))
+                entries = transcript.fetch()
+                language = transcript.language_code
 
             # The library reports whether captions are creator-uploaded or
             # speech-recognition auto-captions. Most English tracks on finance
@@ -111,9 +123,12 @@ class YouTubeAutoCaptionCapture(TranscriptCapture):
                 source=source,
                 confidence=confidence,
                 segments=segments,
-                language="en",
+                language=language,
             )
 
+        except StopIteration:
+            logger.info(f"No transcript for {video_id}: no tracks available")
+            return None
         except (IpBlocked, RequestBlocked, TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
             logger.info(f"No transcript for {video_id}: {type(e).__name__}")
             return None

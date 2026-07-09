@@ -57,7 +57,12 @@ class ClaudeClient:
     """
 
     def __init__(self) -> None:
-        self.client = Anthropic(api_key=settings.anthropic_api_key)
+        # SDK default timeout is up to 10 minutes per call — on a flaky
+        # connection that means a single stalled request can block an
+        # unattended cron run for that long before tenacity even gets a
+        # chance to retry. A short-enough-to-fail-fast timeout lets the
+        # existing retry decorator do its job instead.
+        self.client = Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
     def load_prompt(self, prompt_name: str) -> str:
         """Load a prompt by name from prompts/ directory. Expects <name>.md file."""

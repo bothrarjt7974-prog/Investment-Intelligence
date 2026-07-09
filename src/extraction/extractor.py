@@ -14,6 +14,10 @@ from src.db.queries import fetch_by_id, fetch_unprocessed_content_pieces, insert
 from src.extraction.normalization import normalize_claims
 from src.llm.claude_client import claude
 
+# Transcripts below this length (YouTube Shorts, teaser clips) never
+# contain a 3-6 sentence reasoning chain worth extracting.
+MIN_TRANSCRIPT_CHARS = 500
+
 
 def _coerce_datetime(value: Any) -> datetime | None:
     """Parse an ISO-like timestamp into a timezone-aware datetime."""
@@ -27,6 +31,16 @@ def _coerce_datetime(value: Any) -> datetime | None:
     return None
 
 
+class NonFinancialContentError(ValueError):
+    """
+    Claude answered in prose instead of JSON — in practice this means it
+    correctly recognized non-financial content (movie clips, career
+    advice videos picked up by channel ingestion) and declined to invent
+    claims. Distinct from a real parse failure so the piece is tagged
+    'non_financial_content' rather than counted as a pipeline error.
+    """
+
+
 def parse_claims_response(raw_response: str) -> list[dict[str, Any]]:
     """Parse Claude JSON output and return a validated claim list."""
     cleaned = raw_response.strip()
@@ -38,6 +52,8 @@ def parse_claims_response(raw_response: str) -> list[dict[str, Any]]:
     try:
         payload = json.loads(cleaned)
     except json.JSONDecodeError as exc:
+        if "[" not in cleaned:
+            raise NonFinancialContentError("non_financial_content") from exc
         raise ValueError("Malformed JSON from Claude claim extraction") from exc
 
     if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
@@ -148,6 +164,22 @@ def run_extraction(max_pieces: int | None = None) -> int:
             f"Processing {index}/{total_pieces} ({remaining} remaining): "
             f"piece {piece_id}"
         )
+
+        # Shorts and clips under ~500 chars carry no extractable reasoning
+        # chain — skip before spending an API call. Deterministic, free.
+        if len((piece.get("raw_text") or "").strip()) < MIN_TRANSCRIPT_CHARS:
+            update_by_id(
+                "content_pieces",
+                piece_id,
+                {
+                    "processed_at": pendulum.now("UTC").to_iso8601_string(),
+                    "processing_error": "too_short",
+                },
+            )
+            processed_count += 1
+            logger.info(f"Skipped {index}/{total_pieces} piece {piece_id} (too_short)")
+            continue
+
         try:
             inserted = extract_claims_for_piece(piece)
             update_by_id(
@@ -160,6 +192,19 @@ def run_extraction(max_pieces: int | None = None) -> int:
                 f"Processed {index}/{total_pieces} piece {piece_id} "
                 f"({len(inserted)} claims inserted)"
             )
+        except NonFinancialContentError:
+            # Correct model behavior on junk content, not a failure —
+            # tagged distinctly so error queries don't count it.
+            update_by_id(
+                "content_pieces",
+                piece_id,
+                {
+                    "processed_at": pendulum.now("UTC").to_iso8601_string(),
+                    "processing_error": "non_financial_content",
+                },
+            )
+            processed_count += 1
+            logger.info(f"Piece {piece_id}: non-financial content, no claims")
         except Exception as exc:  # noqa: BLE001
             logger.exception(f"Failed to process piece {piece_id}: {exc}")
             # Set processed_at on failure too (tag, don't retry forever):

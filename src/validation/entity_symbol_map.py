@@ -58,6 +58,50 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "PAYTM": ("PAYTM.NS", "yfinance"),
     "NYKAA": ("NYKAA.NS", "yfinance"),
     "IRCTC": ("IRCTC.NS", "yfinance"),
+    # 2026-07-08 growth batch — tickers real themes/claims/holdings already
+    # reference (fundamentals checks were starving on these).
+    "BHARTIARTL": ("BHARTIARTL.NS", "yfinance"),
+    "DIXON": ("DIXON.NS", "yfinance"),
+    "MAXHEALTH": ("MAXHEALTH.NS", "yfinance"),
+    "FORTIS": ("FORTIS.NS", "yfinance"),
+    "MEDANTA": ("MEDANTA.NS", "yfinance"),
+    "KIMS": ("KIMS.NS", "yfinance"),
+    "YATHARTH": ("YATHARTH.NS", "yfinance"),
+    "NMDC": ("NMDC.NS", "yfinance"),
+    "TECHM": ("TECHM.NS", "yfinance"),
+    "PERSISTENT": ("PERSISTENT.NS", "yfinance"),
+    "MUTHOOTFIN": ("MUTHOOTFIN.NS", "yfinance"),
+    "BANKBARODA": ("BANKBARODA.NS", "yfinance"),
+    "PNB": ("PNB.NS", "yfinance"),
+    "LUPIN": ("LUPIN.NS", "yfinance"),
+    "BEL": ("BEL.NS", "yfinance"),
+    "MARICO": ("MARICO.NS", "yfinance"),
+    "SBILIFE": ("SBILIFE.NS", "yfinance"),
+    "JIOFIN": ("JIOFIN.NS", "yfinance"),
+    "HEROMOTOCO": ("HEROMOTOCO.NS", "yfinance"),
+    "heromotoco": ("HEROMOTOCO.NS", "yfinance"),
+    "INDIGO": ("INDIGO.NS", "yfinance"),
+    "IOC": ("IOC.NS", "yfinance"),
+    "DABUR": ("DABUR.NS", "yfinance"),
+    "NESTLEIND": ("NESTLEIND.NS", "yfinance"),
+    # Equitas Small Finance Bank post-merger NSE symbol
+    "EQUITAS": ("EQUITASBNK.NS", "yfinance"),
+    "KARURVYSYA": ("KARURVYSYA.NS", "yfinance"),
+    "HARIOMPIPE": ("HARIOMPIPE.NS", "yfinance"),
+    "JSL": ("JSL.NS", "yfinance"),
+    "SOLARINDS": ("SOLARINDS.NS", "yfinance"),
+    "ERIS": ("ERIS.NS", "yfinance"),
+    "RADICO": ("RADICO.NS", "yfinance"),
+    "JKCEMENT": ("JKCEMENT.NS", "yfinance"),
+    "BLUESTARCO": ("BLUESTARCO.NS", "yfinance"),
+    "VMM": ("VMM.NS", "yfinance"),
+    "CHOLAFIN": ("CHOLAFIN.NS", "yfinance"),
+    "BAJAJ-AUTO": ("BAJAJ-AUTO.NS", "yfinance"),
+    "M&M": ("M&M.NS", "yfinance"),
+    "HIMADRI": ("HIMADRI.NS", "yfinance"),
+    "VISHNU": ("VISHNU.NS", "yfinance"),
+    # Nagarro SE trades on Frankfurt, not NSE — Indian-founded, German-listed
+    "NAGARRO": ("NA9.DE", "yfinance"),
     # --- US stocks (yfinance, bare ticker) ---
     "AAPL": ("AAPL", "yfinance"),
     "MSFT": ("MSFT", "yfinance"),
@@ -67,6 +111,11 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "NVDA": ("NVDA", "yfinance"),
     "TSLA": ("TSLA", "yfinance"),
     "NFLX": ("NFLX", "yfinance"),
+    "AMD": ("AMD", "yfinance"),
+    "TSM": ("TSM", "yfinance"),
+    "MSTR": ("MSTR", "yfinance"),
+    # Samsung Electronics, Korea Exchange
+    "SAMSUNG": ("005930.KS", "yfinance"),
     # --- Crypto (yfinance) ---
     "BTC": ("BTC-USD", "yfinance"),
     "ETH": ("ETH-USD", "yfinance"),
@@ -103,6 +152,9 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "broad_equity": ("^NSEI", "yfinance"),
     # --- US sector proxies (yfinance sector ETFs — free, liquid, long history) ---
     "us_tech": ("XLK", "yfinance"),
+    # Hierarchy parent for us_tech/global_ai/mega-cap AI names (see
+    # src/synthesis/entity_hierarchy.py) — same proxy as us_tech.
+    "us_tech_ai": ("XLK", "yfinance"),
     "us_software": ("IGV", "yfinance"),
     "us_semiconductors": ("SOXX", "yfinance"),
     "us_banking": ("KBE", "yfinance"),
@@ -156,6 +208,22 @@ UNMAPPABLE: frozenset[str] = frozenset(
         "regulatory_risk",
         "market_sentiment",
         "global_supply_chain",
+    }
+)
+
+# Real companies experts talk about that are NOT publicly traded — no price
+# series, no fundamentals filings. Fundamentals checks short-circuit these to
+# 'not_applicable' instead of hunting for a ticker that doesn't exist.
+# Revisit each on IPO (several here have expected listings).
+PRIVATE_ENTITIES: frozenset[str] = frozenset(
+    {
+        "OPENAI",
+        "ANTHROPIC",
+        "SPACEX",
+        "SPCX",  # alternate extraction spelling of SpaceX
+        "ZEPTO",
+        "NSE",  # NSE India itself — unlisted as of 2026
+        "NPS",  # pension product, not a company
     }
 )
 

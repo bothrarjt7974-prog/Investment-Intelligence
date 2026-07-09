@@ -5,6 +5,124 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-09 — Deterministic sizing gate: code now enforces "never let the LLM invent position sizes"
+
+**Decision:** Add `src/guidance/sizing.py` — after every guidance LLM
+response, code either validates `to_pct` against the matched strategy's
+explicit `allocation_rule` percentage, or (when the strategy states no
+percentage — entry methodologies like DCA legitimately don't) clamps it
+to a risk-profile cap table; any recommended instrument not traceable to
+the theme's instruments, cluster key, strategy entity_class, or the
+user's own holdings rejects the entire response (no row persisted).
+
+**Context:** The first real guidance run (2026-07-08) recommended 8-10%
+positions with per-ticker splits. The prompt forbids invented sizing,
+but the matched DCA strategy had no allocation percentage, so the model
+had nothing to trace to — and `parse_guidance_response` validated only
+`guidance_type`. A prompt-only rule proved unenforceable exactly when it
+mattered.
+
+**Cap table (founder-reviewable policy, not optimization output):**
+conservative ≤5% position / ≤3% instrument; moderate ≤10%/5%;
+aggressive ≤15%/8%. Reductions/exits are never capped — caps constrain
+new exposure, not how much a user may sell. Enforcement is recorded in
+`attribution.sizing_source` (`strategy_allocation_rule` /
+`risk_profile_cap` / `reduction_not_capped`).
+
+**Verified live:** re-run produced rows carrying `sizing_source`; two
+responses naming invented instruments (`us_equities_broad`, `nifty50`
+under a US-tech theme) were rejected outright; an EXIT naming the user's
+own TECHM holding (not in theme instruments) passes — holdings are
+always grounded.
+
+**What would change this:** founder revising the cap numbers; strategies
+gaining structured sizing bands the gate can validate against directly.
+
+**Revisit:** after the first month of real guidance events.
+
+---
+
+## 2026-07-09 — Entity hierarchy for theme clustering (convergence counted where the thesis lives)
+
+**Decision:** `src/synthesis/entity_hierarchy.py` — a deterministic
+child→parent map applied before clustering (MSFT/GOOGL/NVDA/nasdaq/
+us_tech/global_ai → us_tech_ai; IT tickers → indian_it; bank tickers →
+indian_banking; etc.). Child entities surface in the theme's
+`instruments_mentioned`; superseding covers old child-key themes.
+
+**Context:** Exact-entity clustering fragmented one economic story into
+several clusters that each stayed below the conviction bar — us_tech,
+global_ai, nasdaq and MSFT were four separate themes with overlapping
+experts.
+
+**Deliberately conservative:** only unambiguous same-story merges. Broad
+Indian index buckets (nifty50/nifty500/smallcap/midcap) stay separate —
+distinct risk buckets experts genuinely disagree across. Over-merging
+would manufacture fake convergence, which is worse than fragmentation
+because conviction gates real guidance. Deterministic code, never LLM
+(auditable). Additions to the map get logged here.
+
+**Verified live:** active themes 67 → 54; us_tech+global_ai merged into
+one 3-expert us_tech_ai theme (fundamentals: pass).
+
+**Revisit:** when embedding-based cluster suggestion is built (map stays
+as the human-approved allowlist even then).
+
+---
+
+## 2026-07-09 — Grounded chat interface: Q&A over recorded data only, every exchange logged
+
+**Decision:** Build the chat as strictly grounded Q&A
+(`src/synthesis/query.py` + `prompts/grounded_query_v1.md` + Streamlit
+chat tab): context assembled deterministically by code (user's guidance
++ refusals, medium+ themes, keyword-matched quality-passed claims,
+credibility rows, holdings), Sonnet narrates ONLY that context, refuses
+anything amounting to fresh advice, and every Q&A is logged to
+`query_log` (migration 012) with code-assembled sources.
+
+**Context:** User wanted a chat interface. A chat that generates fresh
+recommendations conversationally would bypass every eligibility gate,
+attribution rule, and refusal log the pipeline enforces — for a SEBI RIA
+that's not a UX choice, it's a compliance boundary. User confirmed
+grounded-only scope.
+
+**Verified live:** "why did the system recommend reducing my IT
+exposure?" → correct, fully-attributed answer citing the indian_it theme
+and its 3 experts; "should I buy Bitcoin?" / "recommend me a crypto" →
+refused with pointer to the gated pipeline, expert claims reported as
+claims (not endorsement).
+
+**Also:** portfolio management moved into the UI (view holdings, add
+holdings/lots, create users) sharing the YAML loader's single validator
+(`validate_portfolio_payload`) so the UI can never insert what the file
+loader would reject.
+
+**Revisit:** before any beta user gets chat access (needs auth first).
+
+---
+
+## 2026-07-09 — Extraction/fundamentals robustness fixes from first multi-expert run
+
+**Decision:** Four code fixes, no prompt changes: (1) prose responses
+from extraction (model correctly refusing junk content) are tagged
+`non_financial_content`, distinct from real errors; (2) transcripts
+under 500 chars skip extraction (`too_short`) before any API spend;
+(3) fundamentals accepts `not_applicable` from the LLM (it crashed on a
+SpaceX theme where the only resolvable instruments were peripheral);
+(4) `ENTITY_SYMBOL_MAP` +40 tickers surfaced by real themes/holdings,
+plus a `PRIVATE_ENTITIES` set (OPENAI/ANTHROPIC/SPACEX/ZEPTO/NSE/NPS)
+that fundamentals short-circuits to `not_applicable`. Migration 012 also
+adds `content_pieces.language` (the Hindi-transcript fix's language code
+was being dropped at persistence).
+
+**Verified live:** fundamentals re-run: 0 errors (was 1),
+insufficient_data 14 → 5, and 3 honest rejects now that data exists.
+
+**Revisit:** grow the symbol map and hierarchy as new entities surface —
+standing policy.
+
+---
+
 ## 2026-07-07 — Layer 9 (guidance generation core) built — last layer in the 9-layer architecture
 
 **Decision:** Build guidance generation per `technical_execution_plan_v3.docx`

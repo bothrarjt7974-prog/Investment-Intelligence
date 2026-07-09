@@ -37,6 +37,25 @@ class TestClusterClaimsByEntity:
     def test_empty_input(self):
         assert cluster_claims_by_entity([]) == {}
 
+    def test_child_entities_fold_into_parent_cluster(self):
+        # MSFT, us_tech and global_ai are one economic story — the
+        # hierarchy folds them into us_tech_ai so convergence is counted
+        # where the thesis lives.
+        claims = [
+            {"id": "c1", "entity": "MSFT"},
+            {"id": "c2", "entity": "us_tech"},
+            {"id": "c3", "entity": "global_ai"},
+            {"id": "c4", "entity": "gold"},
+        ]
+        result = cluster_claims_by_entity(claims)
+        assert set(result.keys()) == {"us_tech_ai", "gold"}
+        assert len(result["us_tech_ai"]) == 3
+
+    def test_unknown_entity_maps_to_itself(self):
+        claims = [{"id": "c1", "entity": "some_new_entity"}]
+        result = cluster_claims_by_entity(claims)
+        assert set(result.keys()) == {"some_new_entity"}
+
 
 # =====================================================================
 # RESPONSE PARSING

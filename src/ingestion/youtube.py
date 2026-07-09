@@ -220,6 +220,7 @@ def ingest_video(expert_id: str, video: dict[str, Any]) -> dict[str, Any] | None
         "published_at": published_at,
         "raw_text": result.text,
         "word_count": result.word_count,
+        "language": result.language,
         # Enrichment fields — populated with capture metadata.
         "transcript_source": result.source.value,
         "transcript_confidence": result.confidence,

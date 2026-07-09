@@ -162,71 +162,62 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
 
 ## Current Status & MVP Scope
 
-- **Done: all 9 layers have code and passing tests (313 tests).** As of
-  the 2026-07-07 full-system review + Layer 9 build, every layer through
-  guidance generation has code; Layers 1-7 and part of 8 have run against
-  real data (see the 2026-07-07 decision log entries for the complete
-  trace and every finding). Active prompts: `claim_extraction_v4`,
-  `strategy_extraction_v2`, `quality_filter_v3`, `quality_filter_strategy_v1`,
-  `theme_synthesis_v1`, `fundamentals_check_v1`, `guidance_generation_v1` —
-  none calibrated at full-backlog scale; `guidance_generation_v1` has never
-  run at all yet (see below) and carries the strongest calibration warning
-  in this codebase. 27 real themes exist (2026-07-06 backfill catch-up),
-  all fundamentals-checked (5 pass, 1 downgrade, 1 reject, 13
-  not_applicable, 7 insufficient_data). 1 strategy has a complete real
-  backtest. Strategy library seeded with 11 real CFA/institutional
-  frameworks (`frameworks/`, 2026-07-07) spanning 6 of 8 strategy types.
-  Delivery (`src/delivery/`) is explicitly NOT built — deferred pending a
-  real UI decision.
-- **Deferred:** expert_sources multi-source migration — pushed to Phase H
-  kickoff. Own-history valuation and true multi-quarter earnings-estimate-
-  revision tracking — need historical fundamentals data not free to get;
-  v1 substitutes sector-relative PE and current growth sign. Embedding-
-  based theme clustering (Layer 6 still clusters by exact entity match) —
-  Chroma exists now so this is unblocked on infra, just not yet revisited.
-  Matcher's structured filter is exact entity_class match plus a
-  `broad_equity` fallback, not a full sector hierarchy. Valuation-based
-  backtest triggers — need real historical valuation data, not a technical
-  proxy. `src/validation/backtest.py` has no on-demand market-data
-  backfill (Track A's `ensure_symbol_backfilled` equivalent) — a newly-
-  added `ENTITY_SYMBOL_MAP` entry silently reports `insufficient_history`
-  until manually backfilled. `ENTITY_SYMBOL_MAP` is missing several
-  tickers real themes/claims already reference (`indian_airlines`, AMD,
-  BHARTIARTL, INDIGO, SWIGGY, MCDONALDS, KFC, HUL, DABUR, NESTLEIND, IOC)
-  — grow it as these surface. Delivery (weekly digest, broker links,
-  Zerodha integration) — needs a real UI decision, not started.
-- **BLOCKED on one billing/account issue** (found 2026-07-07, still open):
-  **OpenAI API key has `insufficient_quota`** — confirmed still failing
-  even after a credit top-up (separate account/billing from Anthropic —
-  check platform.openai.com specifically). Blocks
-  `src/strategies/embeddings.py` and therefore the matcher entirely —
-  Layer 8 has never produced a real `theme_strategy_matches` row. Anthropic
-  is confirmed resolved (the interrupted `strategy_extraction_v2`
-  calibration batch completed cleanly; full 20-piece batch shows 0
-  invented trigger types).
-- **Reality check on Layer 9:** all 27 existing themes have
-  `conviction_level='low'` (single-expert clusters are hard-coded LOW).
-  Guidance generation will correctly refuse on every one of them until
-  multi-expert convergence exists — this is "silence is a valid and
-  frequent output" working as designed, not a bug. Seed your own portfolio
-  (`portfolios/`, copy `TEMPLATE.yaml`, real financial data — gitignored
-  by default) and run `src.guidance.generator` to exercise the refusal
-  path; that's the only real exercise available until then.
-- **Full-backlog-run gate checklist** (all must hold before spending on
-  the remaining 732 pieces): (a) OpenAI account funded (Anthropic already
-  is); (b) `claim_extraction_v4`'s 8%-pass result reviewed and accepted;
-  (c) `strategy_extraction_v2`'s zero-invented-types result held across
-  the full 20-piece batch (confirmed); (d) founder review of the
-  2026-07-07 decision log entries in full.
-- **Next:** Once OpenAI is funded — run the matcher for the first time on
-  real data (embeddings have never succeeded). Then, once the gate above
-  clears — full 732-piece run through `claim_extraction_v4` +
-  `strategy_extraction_v2`, full backlog screening, then re-run validator/
-  backtest/fundamentals/matcher/guidance at real volume.
-- **MVP scope:** 1 expert fully processed (Akshat, ~750 pieces), then expand
-  to 10 experts (7 Indian, 3 US); YouTube first, blogs/podcasts Phase H;
-  India + US equities; founder as user zero, then 5-10 beta users
-- Do not expand scope until the current phase operates reliably
+- **Done: the full pipeline has run end-to-end on real multi-expert data
+  (339 tests).** 2026-07-08: an ingestion language-fallback bug fix
+  (`youtube_capture.py` — non-English transcripts were silently dropped)
+  unblocked all 10 experts; 1,000 content pieces ingested, 135 new
+  multi-expert pieces extracted (Hindi extraction verified clean),
+  screened (claims: 21% pass / 73% partial), synthesized. **Multi-expert
+  convergence exists**: 5 medium-conviction themes (us_tech_ai,
+  indian_it, nifty50, sp500, inr_usd). Layer 8 runs on **free local
+  embeddings** (Chroma bundled MiniLM — `EMBEDDING_PROVIDER=local`
+  default; OpenAI billing no longer blocks anything). **First real
+  guidance events generated 2026-07-08/09** against the founder's real
+  seeded portfolio (`portfolios/founder.yaml`, gitignored) — including
+  REDUCE_EXPOSURE on indian_it holdings and correct refusals. Grounded
+  chat interface live in Streamlit (`src/synthesis/query.py`, Q&A logged
+  to `query_log`) plus portfolio view/add UI. Active prompts:
+  `claim_extraction_v4`, `strategy_extraction_v2`, `quality_filter_v3`,
+  `quality_filter_strategy_v1`, `theme_synthesis_v1`,
+  `fundamentals_check_v1`, `guidance_generation_v1`,
+  `grounded_query_v1`. `guidance_generation_v1` has now run for real but
+  is still iteration ~1 of a budgeted 15-25 — founder line-by-line
+  review required before any output is acted on.
+- **Guardrails added 2026-07-09** (see decision log): deterministic
+  sizing gate (`src/guidance/sizing.py` — LLM sizing clamped to the
+  strategy's allocation_rule or a risk-profile cap table; invented
+  instruments reject the whole response; enforcement recorded in
+  `attribution.sizing_source`); entity hierarchy clustering
+  (`src/synthesis/entity_hierarchy.py` — child tickers/sectors fold into
+  parent clusters so convergence is counted honestly); extraction junk
+  handling (`non_financial_content` / `too_short` tags, no wasted API
+  calls on Shorts); fundamentals `not_applicable` accepted from the LLM
+  + `PRIVATE_ENTITIES` short-circuit; `ENTITY_SYMBOL_MAP` +40 tickers.
+- **Deferred:** expert_sources multi-source migration (Phase H).
+  Own-history valuation / earnings-estimate-revision tracking (needs
+  paid historical fundamentals). Embedding-based cluster *suggestion*
+  (hierarchy map is the human-approved allowlist). Valuation-based
+  backtest triggers. Track B on-demand market-data backfill. OpenAI
+  embeddings (quality upgrade only — flip `EMBEDDING_PROVIDER=openai`
+  and delete `data/chroma/` to re-embed once funded). Delivery
+  (weekly digest, alerts, broker integration) — still not started; auth
+  is required before any beta user touches the chat.
+- **Data posture:** founder chose to keep improving on the small dataset
+  before major extraction spend. Remaining big-ticket items, each gated
+  on explicit founder sign-off: (a) old-content backfill per expert —
+  the highest-leverage spend, because claims with passed target dates
+  validate immediately and make credibility scores real (every expert
+  currently sits at the neutral default 50); (b) deeper per-expert
+  ingestion (new experts have 15-20 pieces vs Akshat's 866); (c) the
+  ~702-piece Akshat backlog.
+- **Placeholder data warning:** `portfolios/founder.yaml` acquisition
+  dates are approximations (statement only gave LTCG/STCG splits) — the
+  tax-timing reasoning in guidance is only as accurate as those dates.
+  Replace with real purchase dates.
+- **MVP scope:** 10 experts live (7 Indian, 3 US); YouTube first,
+  blogs/podcasts Phase H; India + US equities; founder as user zero,
+  then 5-10 beta users. Do not expand scope until the current phase
+  operates reliably.
 
 ## RIA / Compliance Notes
 

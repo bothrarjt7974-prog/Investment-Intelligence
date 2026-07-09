@@ -7,11 +7,17 @@ run-loop's failure handling. All DB and LLM access is monkeypatched.
 
 from __future__ import annotations
 
+import pytest
+
 from src.extraction import strategy_extractor
+from src.extraction.extractor import NonFinancialContentError
 from src.extraction.strategy_extractor import (
     _resolve_linked_claim_ids,
     parse_strategies_response,
 )
+
+# Long enough to clear the MIN_TRANSCRIPT_CHARS pre-filter in run loops.
+LONG_TEXT = "market analysis " * 50
 
 
 def test_parse_strategies_response_accepts_json_array() -> None:
@@ -31,12 +37,18 @@ def test_parse_strategies_response_strips_code_fences() -> None:
 
 
 def test_parse_strategies_response_rejects_malformed_json() -> None:
+    # Contains '[' so it's a real parse failure, not a prose refusal.
     try:
-        parse_strategies_response("not json")
+        parse_strategies_response('[{"strategy_text": broken')
     except ValueError as exc:
         assert "Malformed JSON" in str(exc)
     else:
         raise AssertionError("Expected malformed JSON to raise ValueError")
+
+
+def test_parse_strategies_response_prose_refusal_is_non_financial() -> None:
+    with pytest.raises(NonFinancialContentError):
+        parse_strategies_response("This video is career advice, no strategies present.")
 
 
 def test_parse_strategies_response_rejects_non_array() -> None:
@@ -104,7 +116,7 @@ def test_run_strategy_extraction_marks_failed_piece_processed(monkeypatch) -> No
     monkeypatch.setattr(
         strategy_extractor,
         "fetch_unprocessed_content_pieces_for_strategies",
-        lambda limit: [{"id": "piece-1", "raw_text": "text", "expert_id": "e1"}],
+        lambda limit: [{"id": "piece-1", "raw_text": LONG_TEXT, "expert_id": "e1"}],
     )
     monkeypatch.setattr(
         strategy_extractor,
@@ -131,7 +143,7 @@ def test_run_strategy_extraction_marks_success_without_error(monkeypatch) -> Non
     monkeypatch.setattr(
         strategy_extractor,
         "fetch_unprocessed_content_pieces_for_strategies",
-        lambda limit: [{"id": "piece-1", "raw_text": "text", "expert_id": "e1"}],
+        lambda limit: [{"id": "piece-1", "raw_text": LONG_TEXT, "expert_id": "e1"}],
     )
     monkeypatch.setattr(
         strategy_extractor,

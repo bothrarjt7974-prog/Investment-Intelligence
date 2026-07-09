@@ -8,8 +8,13 @@ run-loop's failure handling. All DB and LLM access is monkeypatched.
 
 from __future__ import annotations
 
+import pytest
+
 from src.extraction import extractor
-from src.extraction.extractor import parse_claims_response
+from src.extraction.extractor import NonFinancialContentError, parse_claims_response
+
+# Long enough to clear the MIN_TRANSCRIPT_CHARS pre-filter in run loops.
+LONG_TEXT = "market analysis " * 50
 
 
 def test_parse_claims_response_accepts_json_array() -> None:
@@ -29,12 +34,20 @@ def test_parse_claims_response_strips_code_fences() -> None:
 
 
 def test_parse_claims_response_rejects_malformed_json() -> None:
+    # Contains '[' so it's a real parse failure, not a prose refusal.
     try:
-        parse_claims_response("not json")
+        parse_claims_response('[{"claim_text": broken')
     except ValueError as exc:
         assert "Malformed JSON" in str(exc)
     else:
         raise AssertionError("Expected malformed JSON to raise ValueError")
+
+
+def test_parse_claims_response_prose_refusal_is_non_financial() -> None:
+    # Claude answering in prose (no JSON array anywhere) means it correctly
+    # declined to extract claims from junk content — distinct error type.
+    with pytest.raises(NonFinancialContentError):
+        parse_claims_response("This content is a movie clip with no financial claims.")
 
 
 def test_parse_claims_response_rejects_non_array() -> None:
@@ -55,7 +68,7 @@ def test_run_extraction_marks_failed_piece_processed(monkeypatch) -> None:
     monkeypatch.setattr(
         extractor,
         "fetch_unprocessed_content_pieces",
-        lambda limit: [{"id": "piece-1", "raw_text": "text", "expert_id": "e1"}],
+        lambda limit: [{"id": "piece-1", "raw_text": LONG_TEXT, "expert_id": "e1"}],
     )
     monkeypatch.setattr(
         extractor,
@@ -82,7 +95,7 @@ def test_run_extraction_marks_success_without_error(monkeypatch) -> None:
     monkeypatch.setattr(
         extractor,
         "fetch_unprocessed_content_pieces",
-        lambda limit: [{"id": "piece-1", "raw_text": "text", "expert_id": "e1"}],
+        lambda limit: [{"id": "piece-1", "raw_text": LONG_TEXT, "expert_id": "e1"}],
     )
     monkeypatch.setattr(extractor, "extract_claims_for_piece", lambda piece: [{"id": "c1"}])
     monkeypatch.setattr(

@@ -21,8 +21,8 @@ from typing import Any
 
 import chromadb
 import pendulum
+from chromadb.utils import embedding_functions
 from loguru import logger
-from openai import OpenAI
 
 from src.config.settings import settings
 from src.db.queries import fetch_strategies_pending_embedding, update_by_id
@@ -30,15 +30,31 @@ from src.db.queries import fetch_strategies_pending_embedding, update_by_id
 CHROMA_PATH = Path(__file__).parent.parent.parent / "data" / "chroma"
 COLLECTION_NAME = "strategies"
 
-_openai_client: OpenAI | None = None
+_openai_client: Any | None = None
 _chroma_client: chromadb.ClientAPI | None = None
+_local_embedder: Any | None = None
 
 
-def _get_openai_client() -> OpenAI:
+def _get_openai_client() -> Any:
     global _openai_client
     if _openai_client is None:
+        from openai import OpenAI
+
         _openai_client = OpenAI(api_key=settings.openai_api_key)
     return _openai_client
+
+
+def _get_local_embedder() -> Any:
+    # Chroma's bundled all-MiniLM-L6-v2 (onnxruntime, runs locally, no API
+    # key). Weaker than OpenAI's text-embedding-3-small, but the strategy
+    # library is small (~20-30 items) and the matcher's structured
+    # entity_class filter does most of the discriminating work — the
+    # ranking-quality gap is marginal at this scale. Default provider
+    # until OpenAI billing (separate account from Anthropic) is resolved.
+    global _local_embedder
+    if _local_embedder is None:
+        _local_embedder = embedding_functions.DefaultEmbeddingFunction()
+    return _local_embedder
 
 
 def get_chroma_collection() -> chromadb.Collection:
@@ -58,7 +74,14 @@ def get_chroma_collection() -> chromadb.Collection:
 
 
 def get_embedding(text: str) -> list[float]:
-    """Embed one piece of text via OpenAI. Real API cost — called once per strategy."""
+    """
+    Embed one piece of text via the configured provider
+    (settings.embedding_provider). Local is free; OpenAI is real API cost
+    per call. Both paths feed the same Chroma collection — switching
+    providers requires re-embedding (dimensions differ), see settings.py.
+    """
+    if settings.embedding_provider == "local":
+        return _get_local_embedder()([text])[0]
     response = _get_openai_client().embeddings.create(model=settings.embedding_model, input=text)
     return response.data[0].embedding
 

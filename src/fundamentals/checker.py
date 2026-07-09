@@ -27,7 +27,12 @@ from src.fundamentals.data import (
 )
 from src.llm.claude_client import claude
 
-VALID_VERDICTS = ("pass", "downgrade", "reject")
+# not_applicable is normally a code-side verdict (no resolvable
+# instrument), but the LLM legitimately reaches for it too when the only
+# resolvable instruments turn out irrelevant to the thesis (seen live:
+# a SpaceX theme resolving only to peripheral public comps) — rejecting
+# it crashed the check instead of recording an honest answer.
+VALID_VERDICTS = ("pass", "downgrade", "reject", "not_applicable")
 VALID_FLAGS = ("strong", "neutral", "weak")
 
 

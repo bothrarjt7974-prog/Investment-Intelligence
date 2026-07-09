@@ -36,6 +36,7 @@ from src.guidance.eligibility import (
     check_duplicate_guidance,
     check_theme_eligible,
 )
+from src.guidance.sizing import apply_sizing_gate
 from src.llm.claude_client import claude
 
 VALID_GUIDANCE_TYPES = (
@@ -74,10 +75,19 @@ def parse_guidance_response(raw_response: str) -> dict[str, Any]:
     return payload
 
 
-def build_attribution(theme: dict[str, Any], strategy: dict[str, Any]) -> dict[str, Any]:
+def build_attribution(
+    theme: dict[str, Any],
+    strategy: dict[str, Any],
+    sizing_source: str | None = None,
+) -> dict[str, Any]:
     """
     Assemble the attribution record from real theme/strategy rows —
     never from the LLM's own words. "Full attribution, never invention."
+
+    sizing_source, when provided, is the sizing gate's enforcement record
+    (strategy_allocation_rule / risk_profile_cap / reduction_not_capped)
+    — a code-verified fact, which takes precedence over the descriptive
+    fallback derived from the strategy row alone.
     """
     backtest_summary = None
     if strategy.get("backtest_status") == "complete":
@@ -93,7 +103,8 @@ def build_attribution(theme: dict[str, Any], strategy: dict[str, Any]) -> dict[s
             "strategy_text": strategy.get("strategy_text"),
             "backtest_summary": backtest_summary,
         },
-        "sizing_source": (
+        "sizing_source": sizing_source
+        or (
             "strategy's own stated position sizing"
             if strategy.get("position_sizing")
             else "no explicit sizing rule stated by the matched strategy"
@@ -192,6 +203,9 @@ def generate_guidance_for_portfolio(portfolio: dict[str, Any], theme: dict[str, 
 
     response = claude.synthesize(prompt_name="guidance_generation_v1", content="", variables=variables)
     payload = parse_guidance_response(response)
+    payload, sizing_source = apply_sizing_gate(
+        payload, theme, matched_strategy, portfolio.get("risk_profile", "moderate"), holdings
+    )
 
     return {
         "user_id": user_id,
@@ -207,7 +221,7 @@ def generate_guidance_for_portfolio(portfolio: dict[str, Any], theme: dict[str, 
         "tax_note": payload["tax_note"],
         "estimated_tax_impact": payload["estimated_tax_impact"],
         "conviction_level": theme.get("conviction_level"),
-        "attribution": build_attribution(theme, matched_strategy),
+        "attribution": build_attribution(theme, matched_strategy, sizing_source),
         "risks": payload.get("risks"),
         "is_refusal": False,
         "refusal_reason": None,

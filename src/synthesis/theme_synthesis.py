@@ -29,16 +29,24 @@ from src.db.queries import (
 )
 from src.internal.theme_scoring import VALID_INDEPENDENCE_LABELS, aggregate_cluster
 from src.llm.claude_client import claude
+from src.synthesis.entity_hierarchy import resolve_entity_cluster
 
 
 def cluster_claims_by_entity(claims: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    """Group claims by their canonical entity — deterministic, no LLM."""
+    """
+    Group claims by hierarchy-resolved cluster key — deterministic, no
+    LLM. Claims on child entities (MSFT, us_software, global_ai...) fold
+    into their parent cluster (us_tech_ai) so multi-expert convergence on
+    one economic story is counted at the level the thesis lives, instead
+    of fragmenting across per-ticker clusters that each stay below the
+    conviction bar. See src/synthesis/entity_hierarchy.py.
+    """
     clusters: dict[str, list[dict[str, Any]]] = {}
     for claim in claims:
         entity = claim.get("entity")
         if not entity:
             continue
-        clusters.setdefault(entity, []).append(claim)
+        clusters.setdefault(resolve_entity_cluster(entity), []).append(claim)
     return clusters
 
 
@@ -132,13 +140,22 @@ def synthesize_cluster(
     geographies = [c["geography"] for c in claims if c.get("geography")]
     geography = max(set(geographies), key=geographies.count) if geographies else None
 
+    # Child entities the cluster's claims actually named (tickers folded
+    # in by the hierarchy) must surface as instruments: guidance grounding
+    # and portfolio-alignment checks match holdings against
+    # instruments_mentioned, not against the parent cluster key.
+    claim_entities = sorted({c["entity"] for c in claims if c.get("entity")})
+    instruments = list(
+        dict.fromkeys([*(payload["instruments_mentioned"] or []), *claim_entities])
+    )
+
     return {
         "entity_cluster_key": entity,
         "geography": geography,
         "summary_thesis": payload["summary_thesis"],
         "cycle_position": payload["cycle_position"],
         "dissenting_views": payload["dissenting_views"],
-        "instruments_mentioned": payload["instruments_mentioned"],
+        "instruments_mentioned": instruments,
         "time_horizon_years": time_horizon_years,
         "independence_score": scoring["independence_score"],
         "credibility_weighted_score": scoring["credibility_weighted_score"],
@@ -178,8 +195,13 @@ def run_theme_synthesis(window_days: int = 90, max_clusters: int | None = None) 
 
             # Supersede (never delete) any prior active theme for this
             # cluster — history is preserved for SEBI record-keeping.
-            for existing in fetch_where("themes", {"entity_cluster_key": entity, "status": "active"}):
-                update_by_id("themes", existing["id"], {"status": "superseded"})
+            # Includes themes stored under the cluster's child entity keys
+            # (pre-hierarchy runs created e.g. separate 'us_tech' and
+            # 'global_ai' themes that this parent-key theme replaces).
+            child_keys = {c["entity"] for c in cluster_claims if c.get("entity")}
+            for key in {entity, *child_keys}:
+                for existing in fetch_where("themes", {"entity_cluster_key": key, "status": "active"}):
+                    update_by_id("themes", existing["id"], {"status": "superseded"})
 
             insert_one("themes", theme_row)
             counts["themes_created"] += 1

@@ -24,6 +24,7 @@ from src.db.queries import (
     insert_many,
     update_by_id,
 )
+from src.extraction.extractor import MIN_TRANSCRIPT_CHARS, NonFinancialContentError
 from src.extraction.normalization import normalize_entity, normalize_strategies
 from src.llm.claude_client import claude
 
@@ -51,6 +52,10 @@ def parse_strategies_response(raw_response: str) -> list[dict[str, Any]]:
     try:
         payload = json.loads(cleaned)
     except json.JSONDecodeError as exc:
+        if "[" not in cleaned:
+            # Prose answer = model correctly refusing junk content — see
+            # extractor.NonFinancialContentError for the rationale.
+            raise NonFinancialContentError("non_financial_content") from exc
         raise ValueError("Malformed JSON from Claude strategy extraction") from exc
 
     if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
@@ -180,6 +185,21 @@ def run_strategy_extraction(max_pieces: int | None = None) -> int:
             f"Processing {index}/{total_pieces} ({remaining} remaining): "
             f"piece {piece_id}"
         )
+        # Same deterministic pre-filter as Track A — Shorts/clips carry no
+        # extractable methodology.
+        if len((piece.get("raw_text") or "").strip()) < MIN_TRANSCRIPT_CHARS:
+            update_by_id(
+                "content_pieces",
+                piece_id,
+                {
+                    "strategies_processed_at": pendulum.now("UTC").to_iso8601_string(),
+                    "strategies_processing_error": "too_short",
+                },
+            )
+            processed_count += 1
+            logger.info(f"Skipped {index}/{total_pieces} piece {piece_id} (too_short)")
+            continue
+
         try:
             inserted = extract_strategies_for_piece(piece)
             update_by_id(
@@ -192,6 +212,17 @@ def run_strategy_extraction(max_pieces: int | None = None) -> int:
                 f"Processed {index}/{total_pieces} piece {piece_id} "
                 f"({len(inserted)} strategies inserted)"
             )
+        except NonFinancialContentError:
+            update_by_id(
+                "content_pieces",
+                piece_id,
+                {
+                    "strategies_processed_at": pendulum.now("UTC").to_iso8601_string(),
+                    "strategies_processing_error": "non_financial_content",
+                },
+            )
+            processed_count += 1
+            logger.info(f"Piece {piece_id}: non-financial content, no strategies")
         except Exception as exc:  # noqa: BLE001
             logger.exception(f"Failed to process piece {piece_id}: {exc}")
             # Mark strategies_processed_at on failure too, same rationale as

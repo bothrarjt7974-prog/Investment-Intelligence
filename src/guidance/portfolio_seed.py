@@ -29,49 +29,29 @@ VALID_RISK_PROFILES = ("conservative", "moderate", "aggressive")
 VALID_ASSET_CLASSES = ("equity", "mutual_fund", "etf", "bond", "gold", "crypto", "cash")
 
 
-def parse_portfolio_file(path: Path) -> dict[str, Any]:
-    """Parse and validate one portfolio YAML file. Raises ValueError on any
-    missing/invalid required field."""
-    with path.open(encoding="utf-8") as f:
-        payload = yaml.safe_load(f)
-
+def validate_portfolio_payload(payload: dict[str, Any], source_name: str = "payload") -> dict[str, Any]:
+    """
+    Validate a raw portfolio mapping (from a YAML file OR the Streamlit
+    form — both paths share this single validator so the UI can never
+    insert something the file loader would reject). Raises ValueError on
+    any missing/invalid required field.
+    """
     if not isinstance(payload, dict):
-        raise ValueError(f"{path.name}: must be a YAML mapping")
+        raise ValueError(f"{source_name}: must be a mapping")
 
     missing = [field for field in REQUIRED_USER_FIELDS if not payload.get(field)]
     if missing:
-        raise ValueError(f"{path.name}: missing required user fields {missing}")
+        raise ValueError(f"{source_name}: missing required user fields {missing}")
 
     risk_profile = payload.get("risk_profile", "moderate")
     if risk_profile not in VALID_RISK_PROFILES:
         raise ValueError(
-            f"{path.name}: risk_profile must be one of {VALID_RISK_PROFILES}, got {risk_profile!r}"
+            f"{source_name}: risk_profile must be one of {VALID_RISK_PROFILES}, got {risk_profile!r}"
         )
 
     holdings = payload.get("holdings") or []
     if not isinstance(holdings, list):
-        raise ValueError(f"{path.name}: 'holdings' must be a list")
-
-    parsed_holdings = []
-    for i, holding in enumerate(holdings):
-        missing = [field for field in REQUIRED_HOLDING_FIELDS if not holding.get(field)]
-        if missing:
-            raise ValueError(f"{path.name}: holding #{i} missing required fields {missing}")
-        asset_class = holding.get("asset_class", "equity")
-        if asset_class not in VALID_ASSET_CLASSES:
-            raise ValueError(
-                f"{path.name}: holding #{i} asset_class must be one of "
-                f"{VALID_ASSET_CLASSES}, got {asset_class!r}"
-            )
-        parsed_holdings.append(
-            {
-                "entity": holding["entity"],
-                "quantity": holding["quantity"],
-                "acquired_at": holding["acquired_at"],
-                "cost_basis": holding.get("cost_basis"),
-                "asset_class": asset_class,
-            }
-        )
+        raise ValueError(f"{source_name}: 'holdings' must be a list")
 
     return {
         "user": {
@@ -82,8 +62,67 @@ def parse_portfolio_file(path: Path) -> dict[str, Any]:
             "restrictions": payload.get("restrictions") or [],
         },
         "portfolio_name": payload.get("portfolio_name", "Primary"),
-        "holdings": parsed_holdings,
+        "holdings": validate_holdings(holdings, source_name),
     }
+
+
+def validate_holdings(holdings: list[dict[str, Any]], source_name: str = "payload") -> list[dict[str, Any]]:
+    """Validate a list of holdings dicts. Shared by the file loader and
+    the UI's add-holding form."""
+    parsed_holdings = []
+    for i, holding in enumerate(holdings):
+        missing = [field for field in REQUIRED_HOLDING_FIELDS if not holding.get(field)]
+        if missing:
+            raise ValueError(f"{source_name}: holding #{i} missing required fields {missing}")
+        asset_class = holding.get("asset_class", "equity")
+        if asset_class not in VALID_ASSET_CLASSES:
+            raise ValueError(
+                f"{source_name}: holding #{i} asset_class must be one of "
+                f"{VALID_ASSET_CLASSES}, got {asset_class!r}"
+            )
+        parsed_holdings.append(
+            {
+                "entity": holding["entity"],
+                "quantity": holding["quantity"],
+                "acquired_at": str(holding["acquired_at"]),
+                "cost_basis": holding.get("cost_basis"),
+                "asset_class": asset_class,
+            }
+        )
+    return parsed_holdings
+
+
+def parse_portfolio_file(path: Path) -> dict[str, Any]:
+    """Parse and validate one portfolio YAML file. Raises ValueError on any
+    missing/invalid required field."""
+    with path.open(encoding="utf-8") as f:
+        payload = yaml.safe_load(f)
+    return validate_portfolio_payload(payload, source_name=path.name)
+
+
+def seed_portfolio(parsed: dict[str, Any]) -> dict[str, Any]:
+    """
+    Insert one validated portfolio (user + portfolio + holdings rows).
+    Caller is responsible for the already-exists check (idempotency
+    policy differs between the file loader and the UI).
+    Returns the inserted user row.
+    """
+    user_row = insert_one("users", parsed["user"])
+    portfolio_row = insert_one(
+        "portfolios", {"user_id": user_row["id"], "name": parsed["portfolio_name"]}
+    )
+    if parsed["holdings"]:
+        holding_rows = [{**h, "portfolio_id": portfolio_row["id"]} for h in parsed["holdings"]]
+        insert_many("portfolio_holdings", holding_rows)
+    return user_row
+
+
+def add_holdings(portfolio_id: str, holdings: list[dict[str, Any]]) -> int:
+    """Validate and append holdings to an existing portfolio (UI path)."""
+    validated = validate_holdings(holdings, source_name="new holding")
+    rows = [{**h, "portfolio_id": portfolio_id} for h in validated]
+    insert_many("portfolio_holdings", rows)
+    return len(rows)
 
 
 def load_all_portfolios() -> dict[str, int]:
@@ -118,16 +157,7 @@ def load_all_portfolios() -> dict[str, int]:
             counts["skipped_existing"] += 1
             continue
 
-        user_row = insert_one("users", parsed["user"])
-        portfolio_row = insert_one(
-            "portfolios", {"user_id": user_row["id"], "name": parsed["portfolio_name"]}
-        )
-        if parsed["holdings"]:
-            holding_rows = [
-                {**h, "portfolio_id": portfolio_row["id"]} for h in parsed["holdings"]
-            ]
-            insert_many("portfolio_holdings", holding_rows)
-
+        seed_portfolio(parsed)
         counts["loaded"] += 1
 
     logger.info(

@@ -34,8 +34,17 @@ class Settings(BaseSettings):
     )
 
     # --- OpenAI ---
-    openai_api_key: str = Field(..., description="OpenAI key, used for embeddings only")
+    openai_api_key: str = Field(default="", description="OpenAI key, used for embeddings only")
     embedding_model: str = Field(default="text-embedding-3-small")
+    embedding_provider: Literal["openai", "local"] = Field(
+        default="local",
+        description=(
+            "'local' uses Chroma's bundled all-MiniLM-L6-v2 (free, no API key) — "
+            "the default until OpenAI billing is resolved. 'openai' uses "
+            "text-embedding-3-small (higher quality, real API cost). Switching "
+            "requires re-embedding (delete data/chroma/) since dimensions differ."
+        ),
+    )
 
     # --- Database ---
     supabase_url: str = Field(...)

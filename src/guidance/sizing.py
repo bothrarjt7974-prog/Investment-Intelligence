@@ -23,12 +23,23 @@ from typing import Any
 
 from loguru import logger
 
+from src.config.tuning import param
+
 # Max size for a single theme position (to_pct) and for any single
 # instrument within it, as % of total portfolio, by user risk profile.
 RISK_PROFILE_CAPS: dict[str, dict[str, float]] = {
-    "conservative": {"max_position_pct": 5.0, "max_instrument_pct": 3.0},
-    "moderate": {"max_position_pct": 10.0, "max_instrument_pct": 5.0},
-    "aggressive": {"max_position_pct": 15.0, "max_instrument_pct": 8.0},
+    "conservative": {
+        "max_position_pct": param("sizing.conservative_max_position_pct"),
+        "max_instrument_pct": param("sizing.conservative_max_instrument_pct"),
+    },
+    "moderate": {
+        "max_position_pct": param("sizing.moderate_max_position_pct"),
+        "max_instrument_pct": param("sizing.moderate_max_instrument_pct"),
+    },
+    "aggressive": {
+        "max_position_pct": param("sizing.aggressive_max_position_pct"),
+        "max_instrument_pct": param("sizing.aggressive_max_instrument_pct"),
+    },
 }
 
 # A strategy allocation_rule may state its percentage many ways

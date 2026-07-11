@@ -58,7 +58,13 @@ class YouTubeAutoCaptionCapture(TranscriptCapture):
 
             try:
                 entries = api.fetch(video_id, languages=("en", "en-US", "en-IN"))
-                language = "en"
+                # Read the REAL track language instead of hardcoding "en":
+                # en-IN tracks on Indian channels are frequently Hinglish or
+                # outright Hindi, and hardcoding left all 1,001 pieces
+                # labeled 'en' — Hindi content couldn't be stratified for
+                # quality measurement (2026-07-10 audit). Fall back to "en"
+                # only when the library object doesn't expose the code.
+                language = getattr(entries, "language_code", None) or "en"
             except NoTranscriptFound:
                 # No English track. `api.fetch(video_id)` with no `languages`
                 # arg looks like a fallback but silently defaults to

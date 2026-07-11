@@ -24,6 +24,7 @@ import pendulum
 from loguru import logger
 
 from src.db.queries import (
+    fetch_active_refusal,
     fetch_active_users,
     fetch_best_strategy_match,
     fetch_portfolio_holdings,
@@ -34,6 +35,7 @@ from src.db.queries import (
 from src.guidance.eligibility import (
     check_already_aligned,
     check_duplicate_guidance,
+    check_entity_overlap_guidance,
     check_theme_eligible,
 )
 from src.guidance.sizing import apply_sizing_gate
@@ -191,6 +193,10 @@ def generate_guidance_for_portfolio(portfolio: dict[str, Any], theme: dict[str, 
             "active or executing guidance already exists for this theme and portfolio",
         )
 
+    overlap_reason = check_entity_overlap_guidance(theme, portfolio_id)
+    if overlap_reason:
+        return _refusal(user_id, portfolio_id, theme, overlap_reason)
+
     holdings = fetch_portfolio_holdings(portfolio_id)
     if check_already_aligned(theme, holdings):
         return _refusal(
@@ -248,7 +254,7 @@ def run_guidance_generation(max_themes: int | None = None) -> dict[str, int]:
     users = fetch_active_users()
     logger.info(f"Found {len(themes)} themes ready and {len(users)} active users")
 
-    counts = {"guidance_generated": 0, "refused": 0, "error": 0, "total": 0}
+    counts = {"guidance_generated": 0, "refused": 0, "refusal_deduped": 0, "error": 0, "total": 0}
 
     for user in users:
         portfolios = fetch_portfolios_for_user(user["id"])
@@ -266,6 +272,19 @@ def run_guidance_generation(max_themes: int | None = None) -> dict[str, int]:
                 counts["total"] += 1
                 try:
                     row = generate_guidance_for_portfolio(portfolio, theme)
+                    # Refusal dedup: the identical refusal re-logged every run
+                    # adds nothing to the SEBI record — one active row per
+                    # (theme, portfolio, reason) until something changes
+                    # (2026-07-10 decision log). Real guidance always inserts.
+                    if row["is_refusal"] and fetch_active_refusal(
+                        row["theme_id"], row["portfolio_id"], row["refusal_reason"]
+                    ):
+                        logger.debug(
+                            f"Skipping duplicate refusal for theme {row['theme_id']}, "
+                            f"portfolio {row['portfolio_id']}"
+                        )
+                        counts["refusal_deduped"] += 1
+                        continue
                     insert_one("portfolio_guidance", row)
                     if row["is_refusal"]:
                         counts["refused"] += 1

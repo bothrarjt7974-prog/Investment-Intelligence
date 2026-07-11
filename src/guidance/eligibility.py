@@ -13,9 +13,12 @@ No LLM calls anywhere in this module.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from src.db.queries import fetch_active_guidance
+from src.config.tuning import param
+from src.db.queries import fetch_active_guidance, fetch_portfolio_active_guidance
+from src.guidance.sizing import _entity_is_grounded
 
 ELIGIBLE_CONVICTION_LEVELS = ("medium", "high")
 ELIGIBLE_FUNDAMENTALS_VERDICTS = ("pass", "downgrade")
@@ -77,7 +80,7 @@ def fundamentals_not_applicable_but_eligible(theme: dict[str, Any]) -> bool:
 # theme's entity/instruments already represent this much of the
 # portfolio's value, treat it as "already aligned" rather than generating
 # an increase-exposure recommendation nobody asked for.
-ALREADY_ALIGNED_THRESHOLD_PCT = 15.0
+ALREADY_ALIGNED_THRESHOLD_PCT = param("guidance.already_aligned_threshold_pct")
 
 
 def check_theme_eligible(
@@ -141,3 +144,69 @@ def check_already_aligned(theme: dict[str, Any], holdings: list[dict[str, Any]])
 def check_duplicate_guidance(theme_id: str, portfolio_id: str) -> bool:
     """True if active/executing guidance already exists for this theme+portfolio pair."""
     return bool(fetch_active_guidance(theme_id, portfolio_id))
+
+
+def _expand_entity_tokens(entities: set[str]) -> set[str]:
+    """
+    The raw strings plus their meaningful tokens (4+ chars, same convention
+    as sizing._allowed_entities) — _entity_is_grounded matches token-wise,
+    so composite labels like "us_tech_basket (AAPL, NVDA)" must contribute
+    'aapl'/'nvda'/'us_tech_basket', not just the whole string.
+    """
+    expanded = set(entities)
+    for entity in entities:
+        expanded |= {t for t in re.split(r"[^a-z0-9_&-]+", entity) if len(t) >= 4}
+    expanded.discard("")
+    return expanded
+
+
+def _guidance_target_entities(row: dict[str, Any]) -> set[str]:
+    """Lowercased entity strings a guidance row acts on, token-expanded."""
+    entities: set[str] = set()
+    change = row.get("target_allocation_change") or {}
+    if change.get("entity"):
+        entities.add(str(change["entity"]).lower())
+    for instrument in row.get("specific_instruments") or []:
+        if isinstance(instrument, dict) and instrument.get("entity"):
+            entities.add(str(instrument["entity"]).lower())
+    return _expand_entity_tokens(entities)
+
+
+def check_entity_overlap_guidance(theme: dict[str, Any], portfolio_id: str) -> str | None:
+    """
+    Refusal reason when the portfolio already has LIVE guidance acting on
+    the entities this theme targets — regardless of theme_id. The
+    theme_id-only duplicate gate misses theme lineage: when a theme is
+    superseded, its successor gets a new id and (2026-07-10 audit finding)
+    issued a second active REDUCE on the same holdings. Entity overlap is
+    the honest identity of "same advice".
+
+    Matching reuses the sizing gate's token-wise grounding check so
+    composite labels ("us_tech_basket (AAPL, NVDA)") compare the same way
+    they were validated when the earlier guidance was generated.
+    """
+    theme_targets = {str(theme.get("entity_cluster_key") or "").lower()}
+    theme_targets |= {str(i).lower() for i in theme.get("instruments_mentioned") or []}
+    theme_targets.discard("")
+    if not theme_targets:
+        return None
+    theme_targets = _expand_entity_tokens(theme_targets)
+
+    for row in fetch_portfolio_active_guidance(portfolio_id):
+        if str(row.get("theme_id")) == str(theme.get("id")):
+            continue  # same theme is check_duplicate_guidance's job
+        existing = _guidance_target_entities(row)
+        if not existing:
+            continue
+        # Both directions: the theme naming an entity the guidance covers,
+        # or the guidance naming an entity the theme covers.
+        matched = next((t for t in theme_targets if _entity_is_grounded(t, existing)), None)
+        if matched is None:
+            matched = next((e for e in existing if _entity_is_grounded(e, theme_targets)), None)
+        if matched:
+            return (
+                f"active guidance {row['id']} already covers this theme's "
+                f"target entities (overlap on '{matched}') — one live "
+                f"recommendation per holding at a time"
+            )
+    return None

@@ -439,14 +439,58 @@ def fetch_portfolio_holdings(portfolio_id: str) -> list[dict[str, Any]]:
 
 def fetch_active_guidance(theme_id: str, portfolio_id: str) -> list[dict[str, Any]]:
     """
-    Return active/executing guidance for one theme+portfolio pair —
+    Return active/executing REAL guidance for one theme+portfolio pair —
     src/guidance/eligibility.py's duplicate-guidance gate.
+
+    is_refusal=False matters: refusal rows also carry status='active', and
+    counting them here meant a past refusal permanently blocked the same
+    theme from ever generating real guidance once it became eligible
+    (2026-07-10 audit finding).
     """
     response = (
         supabase.table("portfolio_guidance")
         .select("id")
         .eq("theme_id", theme_id)
         .eq("portfolio_id", portfolio_id)
+        .eq("is_refusal", False)
+        .in_("status", ["active", "executing"])
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_active_refusal(theme_id: str, portfolio_id: str, reason: str) -> list[dict[str, Any]]:
+    """
+    Return active refusal rows for one theme+portfolio with this exact
+    reason — the refusal-dedup gate. The same refusal re-logged every run
+    adds nothing to the SEBI record; one row per (theme, portfolio, reason)
+    until something changes (2026-07-10 decision log).
+    """
+    response = (
+        supabase.table("portfolio_guidance")
+        .select("id")
+        .eq("theme_id", theme_id)
+        .eq("portfolio_id", portfolio_id)
+        .eq("is_refusal", True)
+        .eq("refusal_reason", reason)
+        .eq("status", "active")
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_portfolio_active_guidance(portfolio_id: str) -> list[dict[str, Any]]:
+    """
+    All active/executing real guidance for a portfolio, with the fields the
+    entity-overlap gate needs — a successor theme must not issue a second
+    live recommendation on the same holdings the previous theme generation
+    already covered.
+    """
+    response = (
+        supabase.table("portfolio_guidance")
+        .select("id,theme_id,target_allocation_change,specific_instruments")
+        .eq("portfolio_id", portfolio_id)
+        .eq("is_refusal", False)
         .in_("status", ["active", "executing"])
         .execute()
     )

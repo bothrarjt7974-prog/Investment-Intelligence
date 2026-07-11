@@ -20,6 +20,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import (
     fetch_active_expert_ids,
     fetch_strategies_by_expert,
@@ -36,7 +37,7 @@ from src.extraction.normalization import (
 # A repeated methodology needs to show up across at least this many
 # distinct content pieces to count as a real pattern, not a within-video
 # restatement (already deduped by normalize_strategies) or a coincidence.
-MIN_PATTERN_REPETITIONS = 3
+MIN_PATTERN_REPETITIONS = param("patterns.min_repetitions")
 
 
 def _to_strategy_obj(row: dict[str, Any]) -> Strategy:

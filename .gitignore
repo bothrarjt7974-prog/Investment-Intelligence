@@ -80,3 +80,5 @@ desktop.ini
 # graphify (generated knowledge graph output)
 graphify-out/
 technical_execution_plan_v3.docx
+# Admin tuning overrides (local quality-knob state, set via the Streamlit dashboard)
+config/tuning_overrides.json

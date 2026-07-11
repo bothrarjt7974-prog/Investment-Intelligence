@@ -18,6 +18,7 @@ from typing import Any
 
 import pendulum
 
+from src.config.tuning import param
 from src.db.queries import (
     fetch_portfolio_holdings,
     fetch_portfolios_for_user,
@@ -27,7 +28,7 @@ from src.db.queries import (
 )
 from src.llm.claude_client import claude
 
-MAX_CLAIMS_IN_CONTEXT = 15
+MAX_CLAIMS_IN_CONTEXT = param("query.max_claims_in_context")
 
 
 def _keyword_tokens(question: str) -> set[str]:

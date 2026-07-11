@@ -5,6 +5,233 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-10 — Direction-split gate caps theme conviction (code, not LLM)
+
+**Decision:** Added `direction_split()` (`src/internal/theme_scoring.py`) — a
+deterministic check on a cluster's directional claims (bullish vs bearish).
+When the minority direction exceeds `themes.direction_split_max_minority`
+(default 0.25, tunable), the theme's `conviction_level` is capped at LOW
+and a code-generated sentence is appended to `dissenting_views`, regardless
+of what the credibility-weighted convergence math would otherwise produce.
+
+**Context:** 2026-07-09 audit found the `inr_usd` theme reached MEDIUM
+conviction from one bullish and one bearish claim merged into the same
+entity cluster — the theme's own thesis text admitted "the cluster is
+directionally split," yet nothing downstream blocked it. Conviction scoring
+(`aggregate_cluster`) never reads `claim.direction` at all — only
+independence labels and credibility.
+
+**Choice:** Threshold 25% minority share, applied only to claims with an
+actual bullish/bearish direction (neutral/na ignored) and only when both
+directions are present (a single dissenting voice against unanimous
+agreement isn't "contested" — see the `us_tech_ai` theme's few bearish
+hedges among 31 mostly-bullish claims, correctly not capped).
+
+**Reasoning:** Agreement on a topic is not agreement on what to do about
+it. This is mechanics (counting), so it belongs in code per the project's
+"LLMs do meaning, code does mechanics" rule — not a prompt change.
+
+**What would change this:** If real contested themes turn out to have
+legitimate MEDIUM-conviction uses (e.g. a hedged position thesis), the
+threshold is tunable from the Quality Tuning dashboard without a code
+change.
+
+**Revisit:** After the next theme synthesis run — check whether inr_usd
+(and similar split themes) now cap correctly.
+
+---
+
+## 2026-07-10 — Guidance dedup: refusal re-logging and entity-overlap gate
+
+**Decision:** Two fixes to `src/guidance/`: (a) `fetch_active_guidance`
+(the duplicate-guidance gate) now filters `is_refusal=False` — a prior
+refusal no longer permanently blocks a theme from ever generating real
+guidance once it becomes eligible; (b) new `check_entity_overlap_guidance`
+gate refuses a theme whose target entities overlap with any OTHER theme's
+currently-active real guidance for the same portfolio (reusing
+`sizing._entity_is_grounded`'s token-matching); (c) refusal rows are now
+deduped in `run_guidance_generation` — a new `fetch_active_refusal` lookup
+skips inserting an identical (theme, portfolio, reason) refusal if one is
+already active, rather than appending one every run.
+
+**Context:** 2026-07-09 audit found (i) a portfolio with two active REDUCE
+events on the same PERSISTENT/TECHM holdings, issued by a theme and its
+successor (the theme_id-only duplicate gate misses theme lineage — a
+superseded theme's replacement gets a new id); (ii) 155 of 181 logged
+refusals were the same low-conviction themes refused repeatedly across
+runs, adding no new information to the SEBI record; (iii) `fetch_active_guidance`
+counted refusal rows (which also carry `status='active'`) toward the
+duplicate check, meaning one refusal could permanently block real guidance.
+
+**Choice:** Entity-overlap match is bidirectional and token-wise (handles
+composite instrument labels like "us_tech_basket (AAPL, NVDA)"); refusal
+dedup keys on (theme_id, portfolio_id, is_refusal=True, refusal_reason,
+status='active') — a NEW reason (e.g. conviction changed) still logs fresh.
+
+**Reasoning:** SEBI wants the record of guidance and refusals; it doesn't
+need the identical refusal re-stamped daily, and "one live recommendation
+per holding at a time" is the same principle the already-aligned gate
+already encodes, just extended across theme generations.
+
+**What would change this:** If compliance guidance later requires periodic
+re-affirmation of refusals (not just first-occurrence logging), the dedup
+would need a TTL instead of "forever until reason changes."
+
+**Revisit:** Next guidance generation run — confirm refusal count drops
+sharply and no duplicate active REDUCE events remain.
+
+---
+
+## 2026-07-10 — Record real transcript language; Devanagari backfill
+
+**Decision:** `youtube_capture.py`'s primary fetch path no longer
+hardcodes `language="en"` when an en/en-US/en-IN track succeeds — it reads
+the track's actual `language_code`. One-off deterministic backfill
+(`scripts/backfill_language.py`, Devanagari-codepoint-share heuristic, no
+LLM) run against existing data: 61 of 1,001 pieces relabeled 'en' → 'hi'.
+
+**Context:** All 1,001 content_pieces were labeled `language='en'`
+regardless of actual content — including transcripts stored in Devanagari
+script — because many Indian finance channels expose an en-IN caption
+track (often auto-translated or mislabeled) that satisfied the primary
+fetch attempt, and the code trusted the requested language list over the
+returned track's real code. This made Hindi extraction quality
+unmeasurable (2026-07-09 audit needed a manual heuristic to find Hindi
+pieces for its faithfulness sample).
+
+**Choice:** 20% Devanagari-character threshold for the backfill (catches
+Hindi/Hinglish while not false-positiving on English text with quoted
+Hindi phrases, verified against both cases in tests).
+
+**Reasoning:** Deterministic and free — no reason to spend an LLM call
+detecting language when the codepoints already say it plainly.
+
+**What would change this:** If transcripts in other non-Latin scripts
+(unlikely for the current 10-expert roster) need the same treatment, the
+heuristic generalizes to any Unicode block.
+
+**Revisit:** Never — this is a one-off backfill; going forward, capture
+records the real language at ingestion time.
+
+---
+
+## 2026-07-10 — Backtest step added to the nightly validation workflow
+
+**Decision:** `.github/workflows/validation.yml` now runs
+`python -m src.validation.backtest` after the validator step, same
+schedule (02:00 IST) and secrets. No workflow previously ran the strategy
+backtest job at all.
+
+**Context:** 2026-07-09 audit found 37 of 41 strategies had never been
+backtested — not because the code was broken (a manual run cleared it same
+day), but because no cron ever called it. The validation workflow existed
+and had been on the default branch since 2026-07-04 running claim
+validation nightly, yet 96 past-due claims were still found unvalidated on
+2026-07-09 — five nights the workflow should have run. This session could
+not diagnose why from the repo alone (no `gh` CLI or GitHub web access in
+this environment to inspect Actions run history or confirm repository
+secrets are configured) — **founder should check the repo's Actions tab**
+for run failures or a disabled schedule.
+
+**Choice:** Add the missing step now regardless of the open scheduling
+question — it's correct either way, costs nothing extra (backtesting is
+local pandas/numpy simulation, no LLM), and unblocks Layer 8 matching
+quality once the schedule issue (whatever it is) is resolved.
+
+**What would change this:** If Actions run history shows the workflow
+never fires, the fix is founder-side (re-enable in repo settings, or the
+schedule needs a commit to "wake" a dormant cron — GitHub sometimes
+requires this).
+
+**Revisit:** After the founder checks the Actions tab — confirm the
+workflow is actually executing nightly.
+
+---
+
+## 2026-07-09 — Full-pipeline data audit: findings, two backlog runs, and the trading-call cutoff raised to 7 months
+
+**Decision:** (a) Ran the overdue validation and backtest jobs (no LLM cost):
+90 past-due claims validated (23 correct / 3 partial / 17 incorrect /
+24 opinion_only / 14 data_unavailable), credibility now real for Akshat
+(56.0, 63 validated) and The Plain Bagel (46.1, 0/3 correct); 29 strategies
+backtested (16 complete, 13 insufficient_history). (b) Raised
+`quality.out_of_scope_horizon_months` default 6 → 7. (c) Alias-map additions
+(`SPCX`→`SPACEX`, `us_treasury_yields`→`us_10y_yield`), stale docstring
+prompt-name fix, CLAUDE.md validation command corrected
+(`daily_job` module never existed; it is `src.validation.validator`).
+
+**Context:** First layer-by-layer audit of real DB output (50-claim
+faithfulness sample read against source transcripts, all strategies, all
+themes, all guidance rows). Extraction is faithful — numbers in claims match
+transcripts, Hindi-audio videos yield clean English claims. But 96 past-due
+claims had never been validated (the cron has not been running), 37/41
+strategies were unbacktested, and all 108 claims with target_horizon = exactly
+6 months were stamped in_scope because `derive_scope` uses strict less-than
+while the "short" timeframe bucket's median IS 6 — so every vague
+"short term" trading call (index support levels, near-term FX) was
+guidance-scoped, contradicting the "under 6 months is a trading call" line.
+
+**Choice:** Default 7 so the whole short bucket lands out of scope. Existing
+rows keep their stamped scope (scope is assigned at screening time); this
+governs future screenings. Trading calls still count toward credibility.
+
+**Reasoning:** Sampled horizon-6 claims were overwhelmingly technical/
+trading content. Guidance themes require 12+ month claims anyway, so the
+practical blast radius is small — this closes a semantic hole, not a live leak.
+
+**What would change this:** Evidence that legitimate 6-month investment
+theses (not trading calls) are being excluded from a downstream consumer
+that uses claim scope directly.
+
+**Revisit:** When claim scope gains a new downstream consumer.
+
+**Audit findings deferred as recommendations (no changes made):** 28 claims
+never screened (needs one cheap screener run); 56 pieces stuck on extraction
+errors (32 malformed-JSON, 24 API-400 — retry run); `content_pieces.language`
+is 'en' for all 1001 rows even when raw_text is Devanagari (capture metadata
+gap — Hindi cannot be stratified); theme synthesis labeled every expert pair
+"independent" across all 160 themes (echo detection never fires — prompt
+calibration); the `inr_usd` MEDIUM theme is direction-split (bullish + bearish
+claims merged — conviction scoring ignores directional disagreement);
+matcher semantic similarities are weak (0.22–0.44) because 32/41 strategies
+are `broad_equity` and the library has no sector-specific strategies;
+guidance dedup checks same theme_id only, so a superseded theme's successor
+can issue a duplicate active REDUCE on the same holdings; non-financial
+claims (fire safety, scam punishment) survive extraction + screening as
+'partial' and pollute the claims table.
+
+**Decision:** All 35 tunable quality thresholds across the 9 layers now live
+in one registry (`src/config/tuning.py`) with layman descriptions, safe
+ranges, and raise/lower impact notes. Admin overrides are stored in
+`config/tuning_overrides.json` (gitignored) and edited from a new
+"🎛 Quality Tuning" page in the Streamlit app. Pipeline modules read values
+at import time via `param("<key>")`, so overrides apply on each job's next
+run — never mid-batch.
+
+**Context:** Thresholds were hardcoded constants scattered across 15
+modules; the founder could not see, let alone adjust, system strictness
+without reading source.
+
+**Options considered:**
+- Environment variables per threshold (unwieldy at 35 knobs, no metadata)
+- Database-backed config table (adds DB dependency to every module import)
+- Code registry + JSON overrides file (chosen)
+
+**Choice:** Registry with JSON overrides, clamped to per-parameter safe
+ranges on read; unknown keys and corrupt files fall back to defaults.
+
+**Reasoning:** Zero new infra, works offline, versionable defaults stay in
+code, and the dashboard gets rich metadata (plain-language explanations,
+units, ranges) for free. Every shipped default is unchanged — this is a
+plumbing change, not a calibration change.
+
+**What would change this:** Multi-admin or per-user tuning would need the
+DB-backed approach; that's a Phase H concern.
+
+**Revisit:** When beta users get any tuning surface of their own.
+
+---
+
 ## 2026-07-09 — Synthesis eligibility: "thesis still live" replaces the 90-day recency window
 
 **Decision:** `fetch_synthesizable_claims` now includes any quality-passed

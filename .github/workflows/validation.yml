@@ -50,6 +50,22 @@ jobs:
         run: |
           python -m src.validation.validator
 
+      # Added 2026-07-10 (audit follow-up): Track B strategies were never
+      # backtested by any cron — this workflow only ever ran claim
+      # validation. Same env, same schedule, no LLM cost (pandas/numpy
+      # simulation over market data already fetched above).
+      - name: Backtest strategies
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          LOG_LEVEL: INFO
+        run: |
+          python -m src.validation.backtest
+
       - name: Summary
         run: |
           echo "Validation run complete at $(date -u)."

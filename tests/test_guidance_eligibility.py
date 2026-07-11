@@ -154,3 +154,66 @@ class TestCheckDuplicateGuidance:
     def test_no_existing_guidance_not_duplicate(self, monkeypatch):
         monkeypatch.setattr(eligibility, "fetch_active_guidance", lambda theme_id, portfolio_id: [])
         assert check_duplicate_guidance("theme-1", "portfolio-1") is False
+
+
+class TestCheckEntityOverlapGuidance:
+    """Entity-overlap dedup across theme generations (2026-07-10 audit)."""
+
+    @staticmethod
+    def _active_guidance(*entity_sets):
+        rows = []
+        for i, entities in enumerate(entity_sets):
+            first, *rest = entities
+            rows.append({
+                "id": f"g{i}",
+                "theme_id": f"other-theme-{i}",
+                "target_allocation_change": {"entity": first},
+                "specific_instruments": [{"entity": e} for e in rest],
+            })
+        return rows
+
+    def test_no_active_guidance_no_overlap(self, monkeypatch):
+        monkeypatch.setattr(eligibility, "fetch_portfolio_active_guidance", lambda pid: [])
+        assert eligibility.check_entity_overlap_guidance(make_theme(), "p1") is None
+
+    def test_successor_theme_same_holdings_refused(self, monkeypatch):
+        # The audit's real case: superseded indian_it theme's REDUCE on
+        # PERSISTENT/TECHM, then a successor theme targeting the same stocks.
+        monkeypatch.setattr(
+            eligibility, "fetch_portfolio_active_guidance",
+            lambda pid: self._active_guidance(["indian_it_services", "PERSISTENT", "TECHM"]),
+        )
+        theme = make_theme(
+            id="successor-theme",
+            entity_cluster_key="indian_it",
+            instruments_mentioned=["PERSISTENT", "indian_it_services"],
+        )
+        reason = eligibility.check_entity_overlap_guidance(theme, "p1")
+        assert reason is not None
+        assert "g0" in reason
+
+    def test_unrelated_theme_not_refused(self, monkeypatch):
+        monkeypatch.setattr(
+            eligibility, "fetch_portfolio_active_guidance",
+            lambda pid: self._active_guidance(["gold", "GOLDBEES"]),
+        )
+        theme = make_theme(entity_cluster_key="indian_banking",
+                           instruments_mentioned=["HDFCBANK"])
+        assert eligibility.check_entity_overlap_guidance(theme, "p1") is None
+
+    def test_same_theme_rows_ignored(self, monkeypatch):
+        # Same-theme duplication is check_duplicate_guidance's job.
+        rows = self._active_guidance(["indian_banking", "HDFCBANK"])
+        rows[0]["theme_id"] = "theme-1"
+        monkeypatch.setattr(eligibility, "fetch_portfolio_active_guidance", lambda pid: rows)
+        theme = make_theme(id="theme-1", entity_cluster_key="indian_banking")
+        assert eligibility.check_entity_overlap_guidance(theme, "p1") is None
+
+    def test_composite_instrument_label_overlaps(self, monkeypatch):
+        # Guidance instruments written as composite labels still match.
+        monkeypatch.setattr(
+            eligibility, "fetch_portfolio_active_guidance",
+            lambda pid: self._active_guidance(["us_tech_basket (AAPL, NVDA, MSFT)"]),
+        )
+        theme = make_theme(entity_cluster_key="us_tech_ai", instruments_mentioned=["NVDA"])
+        assert eligibility.check_entity_overlap_guidance(theme, "p1") is not None

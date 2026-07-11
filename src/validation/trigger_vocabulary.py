@@ -35,21 +35,22 @@ from datetime import date, timedelta
 
 import pendulum
 
+from src.config.tuning import param
 from src.validation.market_data import price_series
 
 # Plan §8: "Scans historical market data (2010 onward where available)".
 EARLIEST_HISTORY_DATE = "2010-01-01"
 
-DEFAULT_DRAWDOWN_THRESHOLD_PCT = -20.0
-DEFAULT_CURRENCY_MOVE_THRESHOLD_PCT = 5.0
-CURRENCY_MOVE_WINDOW_DAYS = 90
+DEFAULT_DRAWDOWN_THRESHOLD_PCT = param("triggers.default_drawdown_threshold_pct")
+DEFAULT_CURRENCY_MOVE_THRESHOLD_PCT = param("triggers.currency_move_threshold_pct")
+CURRENCY_MOVE_WINDOW_DAYS = param("triggers.currency_move_window_days")
 
 # Two windows from the same episode (same drawdown, same rate cycle, same
 # currency move) must not each register as a separate trigger — a strategy
 # backtested on "every day of the 2020 crash" would wildly overcount one
 # real historical event. A new trigger only fires if it's at least this
 # many days after the last one recorded by the same detector.
-DEFAULT_EPISODE_GAP_DAYS = 90
+DEFAULT_EPISODE_GAP_DAYS = param("triggers.episode_gap_days")
 
 # always_on has no real trigger — it's a standing rule. Sample the full
 # available history at this stride so it still gets backtested across many

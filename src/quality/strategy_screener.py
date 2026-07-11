@@ -29,6 +29,7 @@ from typing import Any
 import pendulum
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import fetch_unfiltered_strategies, update_by_id
 from src.llm.claude_client import claude
 
@@ -47,7 +48,7 @@ REQUIRED_DIMENSIONS = {
 # out_of_scope for guidance regardless of quality score, but still count
 # toward expert credibility. Kept as its own function rather than sharing
 # claims' derive_scope across two unrelated tables/fields.
-OUT_OF_SCOPE_HORIZON_MONTHS = 6
+OUT_OF_SCOPE_HORIZON_MONTHS = param("quality.out_of_scope_horizon_months")
 
 
 def derive_scope(holding_horizon_months: int | None) -> str:

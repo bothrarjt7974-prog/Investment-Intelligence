@@ -10,13 +10,14 @@ from typing import Any
 import pendulum
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import fetch_by_id, fetch_unprocessed_content_pieces, insert_many, update_by_id
 from src.extraction.normalization import normalize_claims
 from src.llm.claude_client import claude
 
 # Transcripts below this length (YouTube Shorts, teaser clips) never
 # contain a 3-6 sentence reasoning chain worth extracting.
-MIN_TRANSCRIPT_CHARS = 500
+MIN_TRANSCRIPT_CHARS = param("extraction.min_transcript_chars")
 
 
 def _coerce_datetime(value: Any) -> datetime | None:

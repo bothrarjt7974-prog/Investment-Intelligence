@@ -131,7 +131,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        ["🏠 Overview", "🧭 Guidance", "💬 Ask", "💼 Portfolio", "🔬 Pipeline"],
+        ["🏠 Overview", "🧭 Guidance", "💬 Ask", "💼 Portfolio", "🔬 Pipeline", "🎛 Quality Tuning"],
         label_visibility="collapsed",
     )
 
@@ -568,3 +568,110 @@ elif page == "🔬 Pipeline":
         row3[3].metric("Seeded Users", _count("users"))
     except Exception as e:  # noqa: BLE001
         st.error(f"Could not load stats: {e}")
+
+
+# ---------------------------------------------------------------- Quality Tuning
+
+elif page == "🎛 Quality Tuning":
+    from src.config.tuning import (
+        PARAMETERS,
+        effective_values,
+        load_overrides,
+        save_overrides,
+    )
+
+    st.header("Quality Tuning — admin")
+    st.caption(
+        "Every quality knob in the pipeline, grouped by layer. Changes are "
+        "saved to `config/tuning_overrides.json` and take effect the **next "
+        "time each pipeline job runs** (jobs read their configuration at "
+        "startup, so a running batch is never reconfigured mid-flight). "
+        "Threshold changes are decision-log events — record the why."
+    )
+
+    current = effective_values()
+    overrides = load_overrides()
+    if overrides:
+        st.info(
+            f"**{len(overrides)} parameter(s) currently overridden** — "
+            "everything else is at its shipped default."
+        )
+
+    # Group parameters by layer, preserving registry (pipeline) order.
+    layers: dict[str, list] = {}
+    for spec in PARAMETERS.values():
+        layers.setdefault(spec.layer, []).append(spec)
+
+    new_values: dict[str, float | int] = {}
+    for layer_name, specs in layers.items():
+        internal_layer = any(s.internal for s in specs)
+        label = f"{layer_name}" + ("  🔒" if internal_layer else "")
+        with st.expander(label, expanded=False):
+            if internal_layer:
+                st.warning(
+                    "Proprietary scoring logic (`src/internal/`) — never "
+                    "screenshot or share these values outside the team.",
+                    icon="🔒",
+                )
+            for spec in specs:
+                is_overridden = spec.key in overrides
+                title = f"**{spec.title}**" + ("  🟠 overridden" if is_overridden else "")
+                st.markdown(title)
+                st.caption(spec.plain)
+
+                if isinstance(spec.default, int):
+                    value = st.slider(
+                        spec.key,
+                        min_value=int(spec.min_value),
+                        max_value=int(spec.max_value),
+                        value=int(current[spec.key]),
+                        step=int(spec.step),
+                        label_visibility="collapsed",
+                    )
+                else:
+                    value = st.slider(
+                        spec.key,
+                        min_value=float(spec.min_value),
+                        max_value=float(spec.max_value),
+                        value=float(current[spec.key]),
+                        step=float(spec.step),
+                        label_visibility="collapsed",
+                    )
+                new_values[spec.key] = value
+
+                unit = f" {spec.unit}" if spec.unit else ""
+                st.caption(
+                    f"Default: **{spec.default}{unit}** · "
+                    f"⬆️ Higher: {spec.raise_effect} · "
+                    f"⬇️ Lower: {spec.lower_effect}"
+                )
+                st.divider()
+
+    # Matcher ranking weights must sum to 1.0 — warn live, don't block.
+    weight_sum = (
+        new_values.get("matcher.semantic_weight", 0)
+        + new_values.get("matcher.credibility_weight", 0)
+        + new_values.get("matcher.backtest_weight", 0)
+    )
+    if abs(weight_sum - 1.0) > 0.001:
+        st.warning(
+            f"The three strategy-matching ranking weights sum to "
+            f"**{weight_sum:.2f}**, not 1.00 — rankings will still work but "
+            f"scores lose their 0-100 interpretation. Consider rebalancing."
+        )
+
+    col_save, col_reset = st.columns(2)
+    with col_save:
+        if st.button("💾 Save changes", type="primary", use_container_width=True):
+            save_overrides(new_values)
+            changed = {k: v for k, v in new_values.items() if v != PARAMETERS[k].default}
+            st.success(
+                f"Saved. {len(changed)} parameter(s) now differ from defaults. "
+                "New values apply on each job's next run."
+            )
+            st.rerun()
+    with col_reset:
+        if st.button("↩️ Reset ALL to defaults", use_container_width=True):
+            save_overrides({})
+            st.success("All parameters reset to shipped defaults.")
+            st.rerun()

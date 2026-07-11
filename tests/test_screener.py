@@ -300,8 +300,12 @@ class TestDeriveScope:
         assert derive_scope(3) == "out_of_scope"
         assert derive_scope(5) == "out_of_scope"
 
-    def test_boundary_six_months_is_in_scope(self):
-        assert derive_scope(6) == "in_scope"
+    def test_boundary_six_months_is_out_of_scope(self):
+        # Cutoff raised to 7 in the 2026-07-09 audit: "short timeframe"
+        # claims land on exactly 6 months (bucket median) and are trading
+        # calls, so the whole short bucket is out of guidance scope.
+        assert derive_scope(6) == "out_of_scope"
+        assert derive_scope(7) == "in_scope"
 
     def test_long_horizons_are_in_scope(self):
         assert derive_scope(12) == "in_scope"

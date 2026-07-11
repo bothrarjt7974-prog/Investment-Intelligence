@@ -20,6 +20,7 @@ from __future__ import annotations
 from statistics import mean
 from typing import Any
 
+from src.config.tuning import param
 from src.internal.scoring import DEFAULT_SCORE, LONG_HORIZON_MAX_MONTHS
 
 VALID_INDEPENDENCE_LABELS = ("independent", "correlated", "echo")
@@ -29,7 +30,10 @@ VALID_INDEPENDENCE_LABELS = ("independent", "correlated", "echo")
 # per echoing expert or claim) — see technical_execution_plan_v3.docx §9:
 # "independent reasoning 1.0x per expert, correlated 0.5x, echo counts as
 # one signal total."
-INDEPENDENCE_WEIGHT = {"independent": 1.0, "correlated": 0.5}
+INDEPENDENCE_WEIGHT = {
+    "independent": 1.0,
+    "correlated": param("themes.correlated_expert_weight"),
+}
 ECHO_GROUP_WEIGHT = 1.0
 
 # Conviction thresholds — v1 placeholders, same "documented for calibration"
@@ -37,10 +41,11 @@ ECHO_GROUP_WEIGHT = 1.0
 # rates, drawdown thresholds). A single-expert cluster is always LOW
 # regardless of that expert's credibility (Principle 2: aggressive
 # rejection over aggressive recommendation) — one voice is not convergence.
-HIGH_MIN_SIGNAL = 3.0
-HIGH_MIN_CREDIBILITY = 65.0
-MEDIUM_MIN_SIGNAL = 2.0
-MEDIUM_MIN_CREDIBILITY = 50.0
+HIGH_MIN_SIGNAL = param("themes.high_min_signal")
+HIGH_MIN_CREDIBILITY = param("themes.high_min_credibility")
+MEDIUM_MIN_SIGNAL = param("themes.medium_min_signal")
+MEDIUM_MIN_CREDIBILITY = param("themes.medium_min_credibility")
+DIRECTION_SPLIT_MAX_MINORITY = param("themes.direction_split_max_minority")
 
 _LABEL_PRIORITY = {"independent": 2, "correlated": 1, "echo": 0}
 
@@ -64,6 +69,37 @@ def _relevant_credibility(claim: dict[str, Any], expert_credibility: dict[str, d
     bucket = _credibility_bucket(claim.get("target_horizon_months"))
     key = "credibility_structural" if bucket == "structural" else "credibility_long_horizon"
     return float(expert.get(key) if expert.get(key) is not None else DEFAULT_SCORE)
+
+
+def direction_split(claims: list[dict[str, Any]]) -> tuple[bool, str | None]:
+    """
+    Deterministic directional-agreement check for a cluster (2026-07-10
+    audit follow-up: the inr_usd cluster merged one bullish and one bearish
+    claim into a guidance-eligible MEDIUM theme — conviction math never saw
+    direction at all).
+
+    Only 'bullish' and 'bearish' count; 'neutral'/'na' claims express no
+    directional view and are ignored. A cluster is contested when the
+    minority direction exceeds DIRECTION_SPLIT_MAX_MINORITY of the
+    directional claims — a lone hedge inside a large consensus cluster is
+    normal expert behavior, not disagreement.
+
+    Returns (is_contested, note). The note is a code-generated audit
+    sentence for dissenting_views when contested, else None.
+    """
+    bullish = sum(1 for c in claims if c.get("direction") == "bullish")
+    bearish = sum(1 for c in claims if c.get("direction") == "bearish")
+    directional = bullish + bearish
+    if directional == 0 or min(bullish, bearish) == 0:
+        return False, None
+    minority_share = min(bullish, bearish) / directional
+    if minority_share > DIRECTION_SPLIT_MAX_MINORITY:
+        return True, (
+            f"Directional split: {bullish} bullish vs {bearish} bearish claims "
+            f"(minority share {minority_share:.0%}) — conviction capped at low "
+            f"by code until the disagreement resolves."
+        )
+    return False, None
 
 
 def derive_conviction_level(

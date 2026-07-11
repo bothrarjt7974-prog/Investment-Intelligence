@@ -21,6 +21,7 @@ from typing import Any
 import pendulum
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import fetch_validatable_claims, update_by_id
 from src.internal.scoring import recompute_all_experts
 from src.validation.entity_symbol_map import resolve_entity
@@ -33,10 +34,10 @@ DEFAULT_LOOKBACK_DAYS = 7
 # Effectively unbounded (~10y) rather than a short window like daily prices.
 MANUAL_LOOKBACK_DAYS = 3650
 
-DIRECTIONAL_NEUTRAL_CORRECT_BAND = 5.0
-DIRECTIONAL_NEUTRAL_PARTIAL_BAND = 10.0
-DIRECTIONAL_MOVE_THRESHOLD = 2.0
-PRICE_TARGET_PARTIAL_BAND = 0.05  # within 5% of target counts as 'partial'
+DIRECTIONAL_NEUTRAL_CORRECT_BAND = param("validation.neutral_correct_band_pct")
+DIRECTIONAL_NEUTRAL_PARTIAL_BAND = param("validation.neutral_partial_band_pct")
+DIRECTIONAL_MOVE_THRESHOLD = param("validation.directional_move_threshold_pct")
+PRICE_TARGET_PARTIAL_BAND = param("validation.price_target_partial_band")  # fraction of target counted as 'partial'
 
 # "target of ₹1,200" / "target of $250" — currency symbol after "target of" optional.
 _TARGET_PHRASE_RE = re.compile(

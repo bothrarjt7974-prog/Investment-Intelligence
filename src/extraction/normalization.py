@@ -34,11 +34,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
 from typing import Any
 
 from loguru import logger
+
+from src.config.tuning import param
 
 # =====================================================================
 # ENTITY ALIAS MAP
@@ -137,7 +139,10 @@ ENTITY_ALIASES: dict[str, str] = {
     "us_cpi": "us_inflation",
     "indian_gdp": "india_gdp",
     "us_treasury_yield": "us_10y_yield",
+    "us_treasury_yields": "us_10y_yield",  # plural form seen in real claims (2026-07-09 audit)
     "us_10yr": "us_10y_yield",
+    # --- Company-name variants found in real extractions (2026-07-09 audit) ---
+    "SPCX": "SPACEX",  # both spellings appear in claims about SpaceX
 }
 
 # Patterns to recognize ticker-like strings (treated as stock tickers,
@@ -230,7 +235,7 @@ def normalize_entity(entity: str | None) -> str | None:
 #   - Within same strength, prefer the longer/more specific claim_text
 # =====================================================================
 
-SIMILARITY_THRESHOLD = 0.50  # tuned for claim text comparison
+SIMILARITY_THRESHOLD = param("normalization.claim_similarity_threshold")
 STRENGTH_RANK = {"strong": 3, "soft": 2, "opinion": 1}
 
 
@@ -535,7 +540,7 @@ def normalize_claims(
             condition_text (None unless is_conditional)
     """
     if claimed_at.tzinfo is None:
-        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+        claimed_at = claimed_at.replace(tzinfo=UTC)
 
     # Step 1 — parse
     parsed: list[Claim] = []
@@ -597,7 +602,7 @@ def normalize_claims(
 # instrument as to a claim's entity (technical_execution_plan_v3 §6).
 # =====================================================================
 
-STRATEGY_SIMILARITY_THRESHOLD = 0.50
+STRATEGY_SIMILARITY_THRESHOLD = param("normalization.strategy_similarity_threshold")
 
 
 @dataclass

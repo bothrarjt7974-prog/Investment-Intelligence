@@ -27,7 +27,11 @@ from src.db.queries import (
     insert_one,
     update_by_id,
 )
-from src.internal.theme_scoring import VALID_INDEPENDENCE_LABELS, aggregate_cluster
+from src.internal.theme_scoring import (
+    VALID_INDEPENDENCE_LABELS,
+    aggregate_cluster,
+    direction_split,
+)
 from src.llm.claude_client import claude
 from src.synthesis.entity_hierarchy import resolve_entity_cluster
 
@@ -132,6 +136,21 @@ def synthesize_cluster(
     }
     scoring = aggregate_cluster(claims, independence_labels, expert_by_id)
 
+    # Directional-agreement gate (deterministic, post-LLM): a cluster whose
+    # claims meaningfully disagree on direction is contested and can never
+    # exceed LOW conviction — agreement on the topic is not agreement on
+    # what to do about it (2026-07-10 decision log).
+    contested, split_note = direction_split(claims)
+    conviction_level = scoring["conviction_level"]
+    dissenting_views = payload["dissenting_views"]
+    if contested:
+        if conviction_level != "low":
+            logger.info(
+                f"Cluster '{entity}': conviction capped {conviction_level} -> low (directional split)"
+            )
+        conviction_level = "low"
+        dissenting_views = f"{dissenting_views} {split_note}".strip() if dissenting_views else split_note
+
     horizons = [c["target_horizon_months"] for c in claims if c.get("target_horizon_months")]
     # Median, not max — one long-dated outlier claim shouldn't inflate the
     # theme's stated horizon when most of the cluster converges shorter.
@@ -154,12 +173,12 @@ def synthesize_cluster(
         "geography": geography,
         "summary_thesis": payload["summary_thesis"],
         "cycle_position": payload["cycle_position"],
-        "dissenting_views": payload["dissenting_views"],
+        "dissenting_views": dissenting_views,
         "instruments_mentioned": instruments,
         "time_horizon_years": time_horizon_years,
         "independence_score": scoring["independence_score"],
         "credibility_weighted_score": scoring["credibility_weighted_score"],
-        "conviction_level": scoring["conviction_level"],
+        "conviction_level": conviction_level,
         "supporting_experts": scoring["supporting_experts"],
         "source_claim_ids": [c["id"] for c in claims],
         "window_start_date": window_start_date,

@@ -9,7 +9,7 @@ Usage:
     from src.llm.claude_client import claude
 
     response = claude.extract(
-        prompt_template="claim_extraction_v2",
+        prompt_template="claim_extraction_v4",
         content=transcript_text,
         variables={"expert_name": "Ankur Warikoo"},
     )
@@ -18,7 +18,6 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from anthropic import Anthropic, BadRequestError
 from loguru import logger

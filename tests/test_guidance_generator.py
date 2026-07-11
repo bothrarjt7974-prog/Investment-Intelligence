@@ -175,6 +175,7 @@ class TestGenerateGuidanceRefusalPaths:
         self._fail_if_llm_called(monkeypatch)
         monkeypatch.setattr(generator, "fetch_best_strategy_match", lambda theme_id: make_strategy())
         monkeypatch.setattr(generator, "check_duplicate_guidance", lambda theme_id, portfolio_id: False)
+        monkeypatch.setattr(generator, "check_entity_overlap_guidance", lambda theme, portfolio_id: None)
         monkeypatch.setattr(generator, "fetch_portfolio_holdings", lambda portfolio_id: [{"entity": "HDFCBANK", "quantity": 100, "cost_basis": 1500.0}])
         monkeypatch.setattr(generator, "check_already_aligned", lambda theme, holdings: True)
 
@@ -194,6 +195,7 @@ class TestGenerateGuidanceHappyPath:
         strategy = make_strategy()
         monkeypatch.setattr(generator, "fetch_best_strategy_match", lambda theme_id: strategy)
         monkeypatch.setattr(generator, "check_duplicate_guidance", lambda theme_id, portfolio_id: False)
+        monkeypatch.setattr(generator, "check_entity_overlap_guidance", lambda theme, portfolio_id: None)
         monkeypatch.setattr(generator, "fetch_portfolio_holdings", lambda portfolio_id: [])
         monkeypatch.setattr(generator, "check_already_aligned", lambda theme, holdings: False)
         monkeypatch.setattr(generator.claude, "synthesize", lambda **kwargs: VALID_RESPONSE)
@@ -222,10 +224,12 @@ def test_run_guidance_generation_counts_by_outcome(monkeypatch):
 
     def fake_generate(portfolio, theme):
         if theme["id"] == "t1":
-            return {"is_refusal": True, "refusal_reason": "x"}
+            return {"is_refusal": True, "refusal_reason": "x",
+                    "theme_id": "t1", "portfolio_id": portfolio["id"]}
         raise ValueError("boom")
 
     monkeypatch.setattr(generator, "generate_guidance_for_portfolio", fake_generate)
+    monkeypatch.setattr(generator, "fetch_active_refusal", lambda tid, pid, reason: [])
     inserted = []
     monkeypatch.setattr(generator, "insert_one", lambda table, row: inserted.append(row))
 
@@ -236,3 +240,37 @@ def test_run_guidance_generation_counts_by_outcome(monkeypatch):
     assert counts["guidance_generated"] == 0
     assert counts["total"] == 2
     assert len(inserted) == 1  # the errored one never got a row inserted
+
+
+class TestRefusalDedup:
+    """One active refusal row per (theme, portfolio, reason) — 2026-07-10."""
+
+    def _run(self, monkeypatch, existing_refusal_rows):
+        inserted = []
+        monkeypatch.setattr(generator, "fetch_themes_ready_for_matching",
+                            lambda limit: [make_theme(conviction_level="low")])
+        monkeypatch.setattr(generator, "fetch_active_users",
+                            lambda: [{"id": "u1", "risk_profile": "moderate",
+                                      "restrictions": [], "tax_notes": None}])
+        monkeypatch.setattr(generator, "fetch_portfolios_for_user",
+                            lambda uid: [{"id": "p1", "user_id": "u1"}])
+        monkeypatch.setattr(generator, "fetch_best_strategy_match", lambda tid: make_strategy())
+        monkeypatch.setattr(generator, "fetch_active_refusal",
+                            lambda tid, pid, reason: existing_refusal_rows)
+        monkeypatch.setattr(generator, "insert_one",
+                            lambda table, row: inserted.append(row))
+        counts = generator.run_guidance_generation()
+        return counts, inserted
+
+    def test_first_refusal_inserted(self, monkeypatch):
+        counts, inserted = self._run(monkeypatch, existing_refusal_rows=[])
+        assert counts["refused"] == 1
+        assert counts["refusal_deduped"] == 0
+        assert len(inserted) == 1
+        assert inserted[0]["is_refusal"] is True
+
+    def test_repeat_refusal_skipped(self, monkeypatch):
+        counts, inserted = self._run(monkeypatch, existing_refusal_rows=[{"id": "r1"}])
+        assert counts["refused"] == 0
+        assert counts["refusal_deduped"] == 1
+        assert inserted == []

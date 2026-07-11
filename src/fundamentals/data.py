@@ -20,6 +20,7 @@ from typing import Any
 import yfinance as yf
 from loguru import logger
 
+from src.config.tuning import param
 from src.extraction.normalization import NOT_TICKERS, TICKER_PATTERN
 from src.validation.entity_symbol_map import PRIVATE_ENTITIES, resolve_entity
 
@@ -54,12 +55,12 @@ FUNDAMENTALS_FIELDS = (
 # calibration like every other threshold in this codebase. Both conditions
 # must be present AND both must fail; missing data never triggers a veto
 # (absence of data isn't evidence of a problem).
-BALANCE_SHEET_MAX_DEBT_TO_EQUITY = 200.0
-BALANCE_SHEET_MIN_CURRENT_RATIO = 1.0
+BALANCE_SHEET_MAX_DEBT_TO_EQUITY = param("fundamentals.max_debt_to_equity")
+BALANCE_SHEET_MIN_CURRENT_RATIO = param("fundamentals.min_current_ratio")
 
 # Plan §10: "Above 1.5x historical average is a red flag" — reused here as
 # 1.5x sector-peer average, the closest computable analogue (see decision log).
-SECTOR_RELATIVE_PE_RED_FLAG = 1.5
+SECTOR_RELATIVE_PE_RED_FLAG = param("fundamentals.sector_pe_red_flag_ratio")
 
 # --- Index-level valuation check (2026-07-09, closes the "index themes
 # bypass fundamentals" gap for equity indices) ---

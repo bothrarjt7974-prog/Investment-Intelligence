@@ -6,7 +6,11 @@ Pure deterministic math, no DB/LLM access needed.
 
 from __future__ import annotations
 
-from src.internal.theme_scoring import aggregate_cluster, derive_conviction_level
+from src.internal.theme_scoring import (
+    aggregate_cluster,
+    derive_conviction_level,
+    direction_split,
+)
 
 
 def make_claim(claim_id, expert_id, horizon_months=18):
@@ -122,3 +126,47 @@ class TestAggregateCluster:
 
         # c2 falls back to 'correlated' (0.5) rather than being excluded.
         assert result["independence_score"] == round(1.5 / 2, 3)
+
+
+class TestDirectionSplit:
+    """Directional-agreement gate (2026-07-10 audit follow-up)."""
+
+    @staticmethod
+    def _claims(*directions: str) -> list[dict]:
+        return [{"id": f"c{i}", "direction": d} for i, d in enumerate(directions)]
+
+    def test_unanimous_cluster_not_contested(self):
+        contested, note = direction_split(self._claims("bullish", "bullish", "bullish"))
+        assert contested is False
+        assert note is None
+
+    def test_even_split_is_contested(self):
+        # The real inr_usd cluster shape: 1 bullish + 1 bearish.
+        contested, note = direction_split(self._claims("bullish", "bearish"))
+        assert contested is True
+        assert "1 bullish vs 1 bearish" in note
+
+    def test_small_hedge_minority_not_contested(self):
+        # 1 bearish hedge among 5 bullish = 17% minority, under the 25% default.
+        contested, _ = direction_split(
+            self._claims("bullish", "bullish", "bullish", "bullish", "bullish", "bearish")
+        )
+        assert contested is False
+
+    def test_minority_above_threshold_is_contested(self):
+        # 2 of 5 directional = 40% minority.
+        contested, _ = direction_split(
+            self._claims("bullish", "bullish", "bullish", "bearish", "bearish")
+        )
+        assert contested is True
+
+    def test_neutral_and_na_ignored(self):
+        # Only one directional claim: neutral noise can't make it contested.
+        contested, _ = direction_split(
+            self._claims("bullish", "neutral", "na", "neutral")
+        )
+        assert contested is False
+
+    def test_no_directional_claims_not_contested(self):
+        contested, _ = direction_split(self._claims("neutral", "na"))
+        assert contested is False

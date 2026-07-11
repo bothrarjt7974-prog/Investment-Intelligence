@@ -22,6 +22,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import (
     delete_theme_strategy_matches,
     fetch_by_id,
@@ -32,7 +33,7 @@ from src.internal.scoring import DEFAULT_SCORE, LONG_HORIZON_MAX_MONTHS
 from src.strategies.embeddings import get_chroma_collection, get_embedding
 from src.validation.entity_symbol_map import UNMAPPABLE
 
-CANDIDATE_POOL_SIZE = 20
+CANDIDATE_POOL_SIZE = param("matcher.candidate_pool_size")
 
 # strategy_extraction_v2's catch-all entity_class for general (not
 # sector-specific) allocation strategies. A real finding from the first
@@ -68,18 +69,18 @@ def _entity_class_candidates(entity_cluster_key: str) -> list[str]:
 # CFA/institutional strategies have no expert to derive credibility from —
 # the plan says these "carry high default weight" by construction (they're
 # pre-vetted, canonical methodology, not a claim needing validation).
-CFA_DEFAULT_CREDIBILITY_WEIGHT = 75.0
+CFA_DEFAULT_CREDIBILITY_WEIGHT = param("matcher.cfa_default_credibility")
 
 # Strategies with no complete backtest record get a neutral (not
 # penalized, not rewarded) weight — absence of a backtest isn't evidence
 # against the strategy.
-NEUTRAL_BACKTEST_WEIGHT = 50.0
+NEUTRAL_BACKTEST_WEIGHT = param("matcher.neutral_backtest_score")
 
 # v1 placeholder weights (documented for calibration, same status as every
 # other threshold this session) — must sum to 1.0.
-SEMANTIC_WEIGHT = 0.5
-CREDIBILITY_WEIGHT = 0.3
-BACKTEST_WEIGHT = 0.2
+SEMANTIC_WEIGHT = param("matcher.semantic_weight")
+CREDIBILITY_WEIGHT = param("matcher.credibility_weight")
+BACKTEST_WEIGHT = param("matcher.backtest_weight")
 
 
 def _credibility_weight_for_strategy(strategy: dict[str, Any]) -> float:

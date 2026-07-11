@@ -32,6 +32,7 @@ from typing import Any
 import pendulum
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import fetch_backtestable_strategies, update_by_id
 from src.validation.entity_symbol_map import resolve_entity
 from src.validation.market_data import price_on, price_series
@@ -40,11 +41,11 @@ from src.validation.trigger_vocabulary import TRIGGER_DETECTORS
 # Plan §8: strategies with fewer than 3 historical trigger windows are
 # flagged insufficient_history rather than scored — never extrapolate from
 # one data point.
-MIN_TRIGGER_WINDOWS = 3
+MIN_TRIGGER_WINDOWS = param("backtest.min_trigger_windows")
 
 # Used when a strategy states no holding_horizon_months — matches the
 # "medium" bucket median already used for claims (normalization.py).
-DEFAULT_BACKTEST_HORIZON_MONTHS = 12
+DEFAULT_BACKTEST_HORIZON_MONTHS = param("backtest.default_horizon_months")
 
 PRICE_LOOKUP_MAX_LOOKBACK_DAYS = 7
 

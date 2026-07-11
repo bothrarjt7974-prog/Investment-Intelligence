@@ -18,6 +18,7 @@ from typing import Any
 import pendulum
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import (
     fetch_active_expert_ids,
     fetch_claims_for_expert_by_status,
@@ -26,8 +27,8 @@ from src.db.queries import (
 
 VALIDATED_STATUSES = ("correct", "partial", "incorrect")
 
-SHORT_HORIZON_MAX_MONTHS = 12
-LONG_HORIZON_MAX_MONTHS = 36
+SHORT_HORIZON_MAX_MONTHS = param("credibility.short_horizon_max_months")
+LONG_HORIZON_MAX_MONTHS = param("credibility.long_horizon_max_months")
 
 OUTCOME_VALUE = {"correct": 1.0, "partial": 0.5, "incorrect": 0.0}
 STRENGTH_WEIGHT = {"strong": 1.0, "soft": 0.5}
@@ -38,8 +39,8 @@ RECENCY_RECENT_WEIGHT = 1.0
 RECENCY_MID_WEIGHT = 0.5
 RECENCY_OLD_WEIGHT = 0.25
 
-SHRINKAGE_K = 20  # claims needed before the bucket's hit rate is trusted at ~50%
-DEFAULT_SCORE = 50.0
+SHRINKAGE_K = param("credibility.shrinkage_k")  # claims needed before the bucket's hit rate is trusted at ~50%
+DEFAULT_SCORE = param("credibility.default_score")
 SAMPLE_SIZE_THRESHOLD = 20
 
 

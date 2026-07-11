@@ -115,7 +115,7 @@ python -m src.ingestion.run_all           # ingestion pipeline
 python -m src.extraction.extractor        # Track A: claim extraction
 python -m src.extraction.strategy_extractor  # Track B: strategies (Phase B)
 python -m src.quality.screener --max-claims 20  # quality filter (test run)
-python -m src.validation.daily_job        # validation cron
+python -m src.validation.validator        # validation cron (Track A outcomes + credibility)
 python -m src.validation.backtest --max-strategies 20  # Track B backtest (test run)
 python -m src.synthesis.theme_synthesis --max-clusters 5  # theme synthesis (test run)
 python -m src.fundamentals.checker --max-themes 5  # fundamentals check (test run)

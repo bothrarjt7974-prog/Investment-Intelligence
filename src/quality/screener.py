@@ -28,6 +28,7 @@ from typing import Any
 import pendulum
 from loguru import logger
 
+from src.config.tuning import param
 from src.db.queries import fetch_unfiltered_claims, update_by_id
 from src.llm.claude_client import claude
 
@@ -45,7 +46,7 @@ REQUIRED_DIMENSIONS = {
 # window are trading calls, not investment theses — marked out_of_scope for
 # guidance regardless of quality score. They still flow through validation
 # and count toward expert credibility.
-OUT_OF_SCOPE_HORIZON_MONTHS = 6
+OUT_OF_SCOPE_HORIZON_MONTHS = param("quality.out_of_scope_horizon_months")
 
 
 def derive_scope(target_horizon_months: int | None) -> str:

@@ -177,10 +177,10 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
   REDUCE_EXPOSURE on indian_it holdings and correct refusals. Grounded
   chat interface live in Streamlit (`src/synthesis/query.py`, Q&A logged
   to `query_log`) plus portfolio view/add UI. Active prompts:
-  `claim_extraction_v4`, `strategy_extraction_v2`, `quality_filter_v3`,
+  `claim_extraction_v5`, `strategy_extraction_v2`, `quality_filter_v3`,
   `quality_filter_strategy_v1`, `theme_synthesis_v1`,
   `fundamentals_check_v1`, `guidance_generation_v1`,
-  `grounded_query_v1`. `guidance_generation_v1` has now run for real but
+  `grounded_query_v2`. `guidance_generation_v1` has now run for real but
   is still iteration ~1 of a budgeted 15-25 — founder line-by-line
   review required before any output is acted on.
 - **Funnel fixes 2026-07-09** (see decision log): synthesis now takes

@@ -9,7 +9,7 @@ Usage:
     from src.llm.claude_client import claude
 
     response = claude.extract(
-        prompt_template="claim_extraction_v4",
+        prompt_template="claim_extraction_v5",
         content=transcript_text,
         variables={"expert_name": "Ankur Warikoo"},
     )

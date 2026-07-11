@@ -4,7 +4,7 @@
 > statement about HOW to invest — trigger, allocation, sizing, entry, hold,
 > exit) from a piece of expert content and return structured JSON. Claims
 > ("what will happen") are explicitly OUT of scope — they are extracted by
-> the parallel Track A pass (`claim_extraction_v4`).
+> the parallel Track A pass (`claim_extraction_v5`).
 >
 > **Used by:** `src/extraction/strategy_extractor.py`
 >
@@ -167,8 +167,9 @@ really what the expert described.
 
 The sector, asset class, geography, or specific instrument(s) this
 strategy operates on. Use the **same canonical naming rules** as claim
-extraction (`claim_extraction_v4.md`'s entity rules): stock tickers
-UPPERCASE no suffix, indices/sectors/macro factors lowercase_with_underscores.
+extraction (`claim_extraction_v5.md`'s entity rules, unchanged since v2):
+stock tickers UPPERCASE no suffix, indices/sectors/macro factors
+lowercase_with_underscores.
 For a strategy spanning multiple named instruments or a broad category
 ("equity" as an asset class generally), use the most specific canonical
 term that still covers what the expert said; use `broad_equity` for a

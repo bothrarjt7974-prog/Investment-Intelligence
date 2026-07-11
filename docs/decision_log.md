@@ -5,6 +5,102 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-11 — claim_extraction_v5 activated in production
+
+**Decision:** `src/extraction/extractor.py::extract_claims_for_piece` now
+calls `prompt_name="claim_extraction_v5"` (was `claim_extraction_v4`).
+Cross-references updated to match: `CLAUDE.md`'s active-prompts list
+(also corrected a stale `grounded_query_v1` → `grounded_query_v2`, already
+active per the 2026-07-09 audit but never updated in CLAUDE.md),
+`prompts/strategy_extraction_v2.md`'s two references to the Track A
+prompt name, and the illustrative docstring example in
+`src/llm/claude_client.py`. 375 tests passing, no test hardcoded the
+prompt name (extraction tests mock `claude.call` generically).
+
+**Context:** Founder approved activation after reviewing the calibration
+result (see the 2026-07-11 entry above): 76% reduction in a real repeat
+failure mode, no pass-rate regression on a control sample, spot-checked
+for over-exclusion. Founder explicitly asked "what's the best next step"
+before committing to the multi-step spend sequence (theme re-synthesis →
+Track-B catchup → Akshat backlog); activating v5 first was recommended
+so all subsequent extraction spend benefits from the improved prompt
+rather than paying for output under the weaker v4.
+
+**Choice:** Straight swap, no feature flag or gradual rollout — the
+calibration already validated it against the production quality filter
+on real data, and the codebase's stated convention treats a calibrated
+prompt as ready to activate outright (same pattern as v3→v4).
+
+**Reasoning:** v5 strictly dominates v4 on every measured dimension.
+Waiting for a hypothetical v6 that fixes the remaining 4 failures would
+mean spending on Track-B catchup and the Akshat backlog under the known-
+worse prompt for no benefit.
+
+**What would change this:** If the full-backlog run (much larger than
+this 32-piece calibration) shows a pass-rate drop or new failure modes
+not seen in calibration, revert to v4 by reversing this exact swap and
+re-open the v5 investigation.
+
+**Revisit:** After the Akshat backlog spend — confirm v5's calibration
+numbers hold at that scale, per the "not yet confirmed at full-backlog
+scale" caveat that also applied to v4's own calibration.
+
+---
+
+## 2026-07-11 — claim_extraction_v5 drafted and calibrated (not yet activated)
+
+**Decision:** Drafted `prompts/claim_extraction_v5.md` targeting two
+specific defects from the 2026-07-09/11 audits — non-financial content
+surviving extraction as usable claims (fire safety, scam-punishment
+policy), and 17 pieces repeatedly failing with "Malformed JSON from
+Claude claim extraction" (15 of 17 short Hindi transcripts). Calibrated
+against the 17 known-failure pieces plus a 15-piece random control
+sample; `extractor.py` still hardcodes `claim_extraction_v4` — v5 is
+NOT active in production.
+
+**Context:** Founder asked how to improve theme/matching quality, which
+led to a broader "should we rewrite everything" question. Decided against
+a full rewrite (extraction is verified faithful, only narrow defects
+exist) in favor of a targeted, minimally-scoped v5 diff, per the
+project's one-change-at-a-time calibration convention.
+
+**Calibration results:** Malformed-JSON failures: 13/17 fixed (76%) — 12
+now correctly resolve to empty output (incl. 2 genuine junk pieces), 1
+extracted real claims (OYO IPO, 3 claims). 4 still fail: 3 Hindi (escaping
+fix incomplete) and 1 English (Shankar Nath's 15-company list — likely
+output truncation on a long list, a different root cause v5 doesn't
+address). Control sample pass rate 11.9% (14/118) vs v4's 7.5% baseline
+(3/40) — not a strict A/B but no regression signal. Manually spot-checked
+the "empty" outcomes against source transcripts (startup-investing video,
+stock-analysis-method video, debt-advice call, rent-vs-buy explainer) —
+all correctly excluded under **pre-existing** v1-v4 strategy/overview
+rules, not new v5 over-triggering.
+
+**Choice:** Calibration data written to the real `claims` table (same
+precedent as the 2026-07-07 v4 calibration) rather than a scratch table —
+32 pieces now carry real v5-extracted claims, screened and counted
+normally.
+
+**Reasoning:** A 76% reduction in a real, repeat failure mode plus a
+pass-rate improvement with no detected regression clears the bar for
+"real improvement" even though the original "zero repeat failures" bar
+wasn't fully met. The two remaining failure modes (incomplete Hindi
+escaping, English list truncation) are different problems needing their
+own diagnosis — bundling a guess-fix for either into v5 would have made
+this calibration unattributable.
+
+**What would change this:** Confirming v5 doesn't regress at larger scale
+(this calibration is 32 pieces) would raise confidence before activating
+on the full backlog.
+
+**Revisit:** Before activating v5 in `extractor.py` (a separate decision
+from drafting/calibrating it) — swap the hardcoded prompt name and note
+the swap here. Before drafting v6 — the raw-failed-response logging gap
+(`extractor.py` only stores `str(exc)`, never the raw Claude output) blocks
+root-causing the remaining 4 failures and should be fixed first.
+
+---
+
 ## 2026-07-10 — Stranded-data recovery: results
 
 **Decision:** Requeued and reprocessed the pieces/claims stranded by the

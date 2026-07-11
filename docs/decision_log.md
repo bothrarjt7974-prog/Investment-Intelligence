@@ -5,6 +5,39 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-10 — Stranded-data recovery: results
+
+**Decision:** Requeued and reprocessed the pieces/claims stranded by the
+2026-07-09 audit (founder-approved spend, no code change — data-only run).
+
+**Results:** Track A (claims): 56 error-tagged pieces requeued, 42 retried
+this session (9 already recovered by an earlier interrupted attempt) — 22
+succeeded (103 new claims), 4 correctly resolved to `too_short`, 16 failed
+again with the same "Malformed JSON from Claude claim extraction" error —
+**this is a repeat failure, not transient network flakiness, and is worth
+investigating as a claim_extraction_v4 issue on the next prompt calibration
+pass** (see decision log entries above for that queue). Track B
+(strategies): 9 error-tagged pieces requeued and reprocessed — 4 new
+strategies extracted. Screener: 140 previously-unscreened claims (28
+original backlog + 103 newly recovered + a few pre-existing) screened
+(19% pass / 76% partial / 4% fail); 4 new strategies screened (0 pass / 3
+partial / 1 fail).
+
+**Post-recovery state:** 22 pieces remain error-tagged on Track A (down
+from 56 — includes both still-unrecoverable pieces and legitimate
+too_short/non_financial_content tags); 0 remain error-tagged on Track B
+(down from 9). The large remaining "unprocessed" counts (707 Track A, 817
+Track B) are the known, deliberate Akshat-backlog spend gate — not stuck
+or erroring, simply not yet processed by founder choice.
+
+**Revisit:** Investigate the 16 repeat claim_extraction_v4 failures
+alongside the next prompt calibration cycle — same error text across
+different transcripts suggests a specific transcript shape (length,
+formatting, or content type) the current prompt handles badly, not random
+model flakiness.
+
+---
+
 ## 2026-07-10 — Direction-split gate caps theme conviction (code, not LLM)
 
 **Decision:** Added `direction_split()` (`src/internal/theme_scoring.py`) — a

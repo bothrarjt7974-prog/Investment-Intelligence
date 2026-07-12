@@ -5,6 +5,103 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-11 (night) — Track-B catchup: 176 strategies recovered, entity_class normalization gap found
+
+**Decision:** Strategy-extracted the 125 content pieces that already had real
+Track-A claims but had never been run through Track B (predate the
+2026-07-07 credit-wall fix) — scoped explicitly to this ID list rather than
+the module's own `fetch_unprocessed_content_pieces_for_strategies` query,
+which orders by `published_at` with no Track-A filter and would have
+spilled into the untouched 692-piece Akshat backlog. 125/125 processed,
+zero errors, 176 new strategies. Screened (7 pass / 137 partial / 32 fail),
+embedded (free, local), matcher re-run.
+
+**Results:** Library 45 → 221 strategies. Distinct `entity_class` values
+~8 (mostly singleton) → 42. Matched themes 25/33 → 26/33. Concrete quality
+wins: `nifty50`'s top match semantic similarity 0.35 → 0.67 (now a genuine
+nifty50-specific strategy, not a fallback); `indian_banking` moved off the
+generic Ray Dalio fallback onto an actual bank-stock strategy. 188 of 221
+strategies are now unbacktested (was 12) — queued as a free follow-up
+(`src.validation.backtest`, no LLM cost).
+
+**Finding — not fixed this session:** `entity_class` is not canonicalized
+the way claims' `entity` field is. `nifty50` and `nifty_50` exist as two
+separate classes in the library (3 strategies vs 2) with no shared alias
+map, unlike `src/extraction/normalization.py::ENTITY_ALIASES` for claims.
+Risk: the matcher's `_entity_class_candidates` (`src/strategies/matcher.py`)
+could miss real candidates tagged with the "wrong" variant. Needs its own
+fix — either extend normalization to strategy entity_class at extraction
+time, or add a matcher-side alias lookup.
+
+**Reasoning:** These pieces were already paid for on Track A ingestion and
+transcription; only the Track-B LLM call was missing. Cheapest available
+lever for Layer 8, which the 11 July re-audit identified as the weakest
+layer.
+
+**What would change this:** If the entity_class normalization gap turns
+out to meaningfully suppress match quality (would show as themes matching
+worse than their semantic-similarity score suggests they should), it
+should be prioritized ahead of the Akshat backlog rather than left as a
+minor finding.
+
+**Revisit:** Before or during the Akshat backlog spend — canonicalize
+`entity_class` first so the backlog's strategies land in a clean taxonomy
+from the start rather than adding more duplicate variants.
+
+---
+
+## 2026-07-11 (night) — Full theme→fundamentals→matching→guidance chain re-run; direction-split gate and guidance dedup proven live
+
+**Decision:** Re-ran the entire synthesis chain (all four stages) for the
+first time since 9 July, specifically to prove today's fixes work against
+real data rather than trust unit tests alone. `theme_synthesis`: 65 fresh
+themes from 207 claims, 149 old themes superseded, 0 errors.
+`fundamentals.checker`: 65/65 checked, 0 errors (5 pass / 16 downgrade /
+4 reject / 32 not_applicable / 8 insufficient_data). `strategies.matcher`:
+25/33 matched (pre-Track-B-catchup baseline). `guidance.generator`: run
+**twice deliberately**, same theme set, to force-test the refusal-dedup
+fix — run 1: 6 new events (all MAINTAIN) + 58 refusals; run 2: 60/66 pairs
+correctly skipped as duplicates (zero new rows), 6 correctly inserted
+(each theme's first-ever "guidance already exists" refusal, since those 6
+had just become real guidance in run 1). 60 + 6 = 66, exact.
+
+**Direction-split gate fired on 12 real themes**, including the case it
+was built for: `inr_usd` (1 bullish vs 1 bearish, Ranade vs Warikoo) now
+LOW with a readable code-generated dissent note. More consequentially,
+`us_tech_ai` also dropped MEDIUM → LOW (18 bullish vs 12 bearish, a
+genuine 40% split — Plain Bagel's and Jikh's AI-bubble thesis vs the
+rest). **Two guidance events from 8 July were issued against the version
+of this theme that existed before the gate** — those rows are untouched
+(the gate doesn't retroactively supersede), flagged for the founder's
+next review, not an error.
+
+**Post-run note:** guidance totals grew further after this work (324 rows
+observed later the same night: 14 events, 310 refusals) beyond what the
+two deliberate test runs produced — most likely a founder-initiated run
+via the app, not traced to any Claude-initiated action. Refusal count
+grew (245 → 310) while event count held exactly at 14, consistent with
+dedup continuing to hold under real, unplanned usage — additional
+confirmation beyond the orchestrated test, not just repetition of it.
+
+**Reasoning:** Live-data proof matters more than unit tests for gates
+that only fire under specific real-world conditions (a genuinely split
+cluster, a genuine re-run). Both fixes had passing unit tests before this
+run; only this run demonstrated they behave correctly on the actual
+convergence math and the actual refusal history.
+
+**What would change this:** If a future re-synthesis run shows the
+direction-split gate capping a theme that shouldn't be contested (e.g. a
+single stray hedge among many claims), the `themes.direction_split_max_minority`
+threshold (tunable, Quality Tuning dashboard) should be raised, not the
+gate removed.
+
+**Revisit:** Founder review — confirm the `us_tech_ai` conviction drop is
+intentional/acceptable, and mark the pre-existing PERSISTENT/TECHM
+duplicate-guidance row superseded (confirmed still present, unaffected by
+the new gate as expected — it predates the fix).
+
+---
+
 ## 2026-07-11 — claim_extraction_v5 activated in production
 
 **Decision:** `src/extraction/extractor.py::extract_claims_for_piece` now

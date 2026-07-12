@@ -162,8 +162,26 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
 
 ## Current Status & MVP Scope
 
+- **As of 2026-07-11/12 (see decision log for full detail):** a
+  full-pipeline data-quality audit (9-11 July) found and fixed real bugs —
+  a boundary hole in the trading-call cutoff, a duplicate-guidance gate
+  that missed theme lineage, a hardcoded transcript-language bug that hid
+  all Hindi content, a theme-conviction gap that let directionally-split
+  expert clusters reach guidance eligibility (`inr_usd`, then
+  `us_tech_ai`) — all fixed, tested (375 tests), and proven against real
+  data by re-running the full chain twice. `claim_extraction_v5`
+  (calibrated: 76% reduction in a repeat malformed-JSON failure mode, no
+  quality regression) is now active. Track-B catchup extracted 176 more
+  strategies from already-ingested content. **Current real counts: 958
+  claims, 221 strategies (42 distinct entity classes), 76 active themes
+  (5 medium: indian_fmcg, crypto_sector, nifty50, indian_banking,
+  us_consumer), 299 theme-strategy matches, 14 real guidance events.**
+  All work on branch `fix/audit-layer-fixes` (pushed, not yet merged to
+  main). Known open item: strategy `entity_class` isn't canonicalized the
+  way claims' `entity` field is (`nifty50` vs `nifty_50` coexist) — flagged
+  in the decision log, not yet fixed.
 - **Done: the full pipeline has run end-to-end on real multi-expert data
-  (339 tests).** 2026-07-08: an ingestion language-fallback bug fix
+  (339 tests, now 375).** 2026-07-08: an ingestion language-fallback bug fix
   (`youtube_capture.py` — non-English transcripts were silently dropped)
   unblocked all 10 experts; 1,000 content pieces ingested, 135 new
   multi-expert pieces extracted (Hindi extraction verified clean),
@@ -180,9 +198,9 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
   `claim_extraction_v5`, `strategy_extraction_v2`, `quality_filter_v3`,
   `quality_filter_strategy_v1`, `theme_synthesis_v1`,
   `fundamentals_check_v1`, `guidance_generation_v1`,
-  `grounded_query_v2`. `guidance_generation_v1` has now run for real but
-  is still iteration ~1 of a budgeted 15-25 — founder line-by-line
-  review required before any output is acted on.
+  `grounded_query_v2`. `guidance_generation_v1` has now run for real
+  several times (iteration ~3-4 of a budgeted 15-25) — founder
+  line-by-line review still required before any output is acted on.
 - **Funnel fixes 2026-07-09** (see decision log): synthesis now takes
   any quality-passed long-horizon claim whose **target_date is still in
   the future** (was: claimed within 90 days — that discarded 69% of
@@ -216,13 +234,17 @@ Capture meaningful decisions in `docs/decision_log.md`. Required for:
   (weekly digest, alerts, broker integration) — still not started; auth
   is required before any beta user touches the chat.
 - **Data posture:** founder chose to keep improving on the small dataset
-  before major extraction spend. Remaining big-ticket items, each gated
-  on explicit founder sign-off: (a) old-content backfill per expert —
-  the highest-leverage spend, because claims with passed target dates
-  validate immediately and make credibility scores real (every expert
-  currently sits at the neutral default 50); (b) deeper per-expert
-  ingestion (new experts have 15-20 pieces vs Akshat's 866); (c) the
-  ~702-piece Akshat backlog.
+  before major extraction spend — validated by the 9-11 July audit before
+  proceeding. Credibility is no longer uniformly neutral: Akshat
+  Shrivastava earned 56.0 (39/63 correct) and The Plain Bagel dropped to
+  46.1 (0/3 correct) as claims resolved; 8 of 10 experts still sit at the
+  neutral default 50, pending more validated claims. Remaining big-ticket
+  items, each gated on explicit founder sign-off: (a) old-content
+  backfill per expert — the highest-leverage spend, because claims with
+  passed target dates validate immediately and make credibility scores
+  real for the other 8 experts; (b) deeper per-expert ingestion (new
+  experts have 15-20 pieces vs Akshat's 866); (c) the ~692-piece Akshat
+  backlog (Track A and Track B both, after tonight's 125-piece catchup).
 - **Placeholder data warning:** `portfolios/founder.yaml` acquisition
   dates are approximations (statement only gave LTCG/STCG splits) — the
   tax-timing reasoning in guidance is only as accurate as those dates.

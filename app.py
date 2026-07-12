@@ -27,6 +27,12 @@ from src.db.queries import (
     fetch_user_by_email,
     fetch_where,
 )
+from src.guidance.copy import (
+    humanize_days,
+    refusal_reason_label,
+    sizing_source_label,
+    source_type_label,
+)
 from src.guidance.display import compute_action_amounts
 from src.guidance.portfolio_seed import (
     VALID_ASSET_CLASSES,
@@ -35,6 +41,7 @@ from src.guidance.portfolio_seed import (
     seed_portfolio,
     validate_portfolio_payload,
 )
+from src.guidance.readiness import assess_theme_readiness
 from src.synthesis.query import answer_query
 
 st.set_page_config(
@@ -43,13 +50,21 @@ st.set_page_config(
     layout="wide",
 )
 
-CONVICTION_BADGE = {"high": "🟢 HIGH", "medium": "🟡 MEDIUM", "low": "⚪ low"}
+# 2026-07-13: labels rewritten for a general, non-technical user — see
+# docs/decision_log.md. Internal terms ("conviction," "fundamentals
+# verdict," "superseded") never appear verbatim in the UI after this pass.
+CONVICTION_BADGE = {"high": "🟢 High confidence", "medium": "🟡 Medium confidence", "low": "⚪ Low confidence"}
+CONVICTION_HELP = (
+    "How many experts, reasoning independently, agree on this idea — and how "
+    "strong their track record is. A single voice can never reach Medium or "
+    "High, no matter how credible."
+)
 FUNDAMENTALS_BADGE = {
-    "pass": "✅ pass",
-    "downgrade": "🟠 downgrade",
-    "reject": "🔴 reject",
-    "not_applicable": "➖ n/a",
-    "insufficient_data": "❔ no data",
+    "pass": "✅ Financially healthy",
+    "downgrade": "🟠 Valuation looks stretched",
+    "reject": "🔴 Red flag on the balance sheet",
+    "not_applicable": "➖ N/A (index/currency/commodity)",
+    "insufficient_data": "❔ Not enough data yet",
 }
 GUIDANCE_ICON = {
     "INTRODUCE_NEW": "🆕",
@@ -134,11 +149,15 @@ def relevance_badge(guidance: dict[str, Any]) -> tuple[str, str] | None:
 
     Always answers "what's the current status and time remaining" — a
     fresh row gets a quiet positive count-down, not silence, per the
-    founder's direct question (2026-07-12).
+    founder's direct question (2026-07-12). Wording rewritten 2026-07-13
+    for a general reader — "superseded" and "re-synthesis" never appear
+    here even though those are the real, technical field/status names
+    stored in the database; this function is display-only translation.
     """
     if guidance.get("status") == "superseded":
-        reason = guidance.get("stale_reason") or "its source theme has changed"
-        return "error", f"⛔ Superseded — {reason}"
+        generated = _parse_date(guidance.get("generated_at"))
+        when = f" on {generated.isoformat()}" if generated else ""
+        return "error", f"🔴 Outdated — our analysis has moved on since this was generated{when}. Check for new guidance above."
 
     review_by = _parse_date(guidance.get("review_by"))
     if review_by is None:
@@ -146,8 +165,8 @@ def relevance_badge(guidance: dict[str, Any]) -> tuple[str, str] | None:
 
     days_left = (review_by - date.today()).days
     if days_left < 0:
-        return "warning", f"⚠️ Past review date ({review_by.isoformat()}, {-days_left}d ago) — worth a fresh look"
-    return "info", f"🟢 Fresh — review by {review_by.isoformat()} ({days_left}d remaining)"
+        return "warning", f"🟡 Due for a refresh — last checked {humanize_days(-days_left)} ago"
+    return "info", f"🟢 Up to date — next review in {humanize_days(days_left)}"
 
 
 def user_selector(key: str) -> str | None:
@@ -204,40 +223,61 @@ if page == "🏠 Overview":
         guidance_all = fetch_where("portfolio_guidance", {}, limit=500)
         real_guidance = [g for g in guidance_all if not g["is_refusal"]]
         # 2026-07-12: a guidance row's own status matters now that theme
-        # supersession cascades onto it — "14 events" reads as current when
-        # they might all be stale, so split the count.
+        # supersession cascades onto it — showing every row as if it were
+        # current would be misleading once a newer analysis has replaced it.
         live_guidance = [g for g in real_guidance if g.get("status") not in ("superseded", "completed")]
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Active themes", len(themes))
-        c2.metric("Multi-expert conviction", len(strong))
-        c3.metric("Live guidance", len(live_guidance))
-        c4.metric("Superseded guidance", len(real_guidance) - len(live_guidance))
-        c5.metric("Refusals logged", len(guidance_all) - len(real_guidance))
+        c1.metric("Investment ideas being tracked", len(themes))
+        c2.metric("Ideas multiple experts agree on", len(strong))
+        c3.metric("Current recommendations", len(live_guidance))
+        c4.metric(
+            "Replaced by newer analysis",
+            len(real_guidance) - len(live_guidance),
+            help="Recommendations built on an idea that's since been re-checked and updated. Not wrong when they were made — just no longer the latest word.",
+        )
+        c5.metric(
+            "Times we chose not to act",
+            len(guidance_all) - len(real_guidance),
+            help="The system would rather say nothing than guess. Every one of these is logged with a reason — see the Guidance page.",
+        )
 
         pieces_all = fetch_where("content_pieces", {}, limit=1200)
         track_a_done = sum(1 for p in pieces_all if p.get("processed_at"))
         track_b_done = sum(1 for p in pieces_all if p.get("strategies_processed_at"))
         pv1, pv2 = st.columns(2)
         pv1.metric(
-            "Videos with claims extracted",
+            "Videos analyzed for expert predictions",
             f"{track_a_done} / {len(pieces_all)}",
-            help="Track A — content pieces run through claim extraction so far. The rest are a deliberate, founder-gated backlog, not stuck.",
+            help="The rest are a deliberate backlog waiting on budget approval, not stuck or broken.",
         )
         pv2.metric(
-            "Videos with strategies extracted",
+            "Videos analyzed for investment methods",
             f"{track_b_done} / {len(pieces_all)}",
-            help="Track B — content pieces run through strategy extraction so far.",
+            help="How to act on a prediction (not just what the prediction is) — analyzed separately.",
         )
 
-        st.subheader("Themes with real expert convergence", divider="gray")
+        st.subheader("Ideas where multiple experts agree", divider="gray")
         st.caption(
-            "A theme only reaches MEDIUM/HIGH when independent experts agree on "
-            "the same story — single voices stay LOW by design."
+            "An idea only reaches Medium or High confidence when several experts, "
+            "reasoning independently, reach the same conclusion — one voice alone "
+            "never counts, no matter how credible."
         )
 
         if not strong:
-            st.info("No multi-expert themes yet.")
+            st.info("No multi-expert ideas yet.")
+
+        # 2026-07-13: "is there enough behind this to act on?" — one cheap
+        # lookup per idea (there are only ever a handful of medium/high
+        # ideas at once) against tables already fetched elsewhere in the
+        # app. See src/guidance/readiness.py for what each check means.
+        readiness_by_theme: dict[str, dict] = {}
+        for t in strong:
+            matches = fetch_where("theme_strategy_matches", {"theme_id": t["id"], "rank": 1}, limit=1)
+            top_match = matches[0] if matches else None
+            strategy = fetch_by_id("strategies", top_match["strategy_id"]) if top_match else None
+            readiness_by_theme[t["id"]] = assess_theme_readiness(t, top_match, strategy)
+
         for t in sorted(strong, key=lambda x: x.get("conviction_level", ""), reverse=True):
             experts_list = ", ".join(
                 e.get("expert_name", "?") for e in (t.get("supporting_experts") or [])
@@ -247,22 +287,30 @@ if page == "🏠 Overview":
                 left.markdown(f"### {t['entity_cluster_key']}")
                 left.markdown(f"**{experts_list}**")
                 left.write(t.get("summary_thesis", ""))
-                right.markdown(CONVICTION_BADGE.get(t.get("conviction_level"), "⚪"))
-                right.markdown(
-                    "Fundamentals: " + FUNDAMENTALS_BADGE.get(t.get("fundamentals_verdict"), "❔ pending")
-                )
+                right.markdown(CONVICTION_BADGE.get(t.get("conviction_level"), "⚪"), help=CONVICTION_HELP)
+                right.markdown(FUNDAMENTALS_BADGE.get(t.get("fundamentals_verdict"), "❔ Checking pending"))
                 if t.get("time_horizon_years"):
-                    right.markdown(f"Horizon: ~{t['time_horizon_years']} yr")
+                    yrs = t["time_horizon_years"]
+                    frame = "about 1 year" if yrs == 1 else f"about {yrs:g} years"
+                    right.markdown(f"Time frame: {frame}")
 
-        with st.expander(f"All {len(themes)} active themes"):
+                readiness = readiness_by_theme.get(t["id"])
+                if readiness:
+                    overall_icon = {"good": "✅", "fair": "🟡", "poor": "🔴"}[readiness["overall"]["level"]]
+                    with st.expander(f"{overall_icon} Is there enough here to act on? — {readiness['overall']['label']}"):
+                        for check in readiness["checklist"]:
+                            icon = {"good": "✅", "fair": "🟡", "poor": "🔴"}[check["level"]]
+                            st.markdown(f"{icon} **{check['label']}** — {check['detail']}")
+
+        with st.expander(f"All {len(themes)} active ideas"):
             st.dataframe(
                 [
                     {
-                        "Theme": t["entity_cluster_key"],
-                        "Conviction": t.get("conviction_level"),
-                        "Fundamentals": t.get("fundamentals_verdict") or "pending",
+                        "Idea": t["entity_cluster_key"],
+                        "Confidence": t.get("conviction_level"),
+                        "Financials": t.get("fundamentals_verdict") or "pending",
                         "Experts": len(t.get("supporting_experts") or []),
-                        "Horizon (yr)": t.get("time_horizon_years"),
+                        "Time frame (yr)": t.get("time_horizon_years"),
                     }
                     for t in themes
                 ],
@@ -277,9 +325,10 @@ if page == "🏠 Overview":
 elif page == "🧭 Guidance":
     st.header("Your guidance")
     st.caption(
-        "Every recommendation traces to named experts, a real strategy, and a "
-        "fundamentals check — and every refusal is logged with its reason. "
-        "Silence is a valid output."
+        "Every recommendation traces back to named experts, a real investing "
+        "strategy, and a check on the underlying financials — and every time "
+        "we choose not to act, the reason is logged too. Staying quiet is a "
+        "valid answer."
     )
 
     email = user_selector("guidance-user")
@@ -293,22 +342,23 @@ elif page == "🧭 Guidance":
         # already covered by active guidance are refused as duplicates.
         col_btn, col_note = st.columns([1, 3])
         if col_btn.button("🔄 Check for new guidance"):
-            with st.spinner("Running the gated guidance pipeline (eligibility → synthesis → sizing)..."):
+            with st.spinner("Checking your portfolio against the latest expert analysis..."):
                 try:
                     from src.guidance.generator import run_guidance_generation
 
                     counts = run_guidance_generation()
                     st.success(
-                        f"Done — {counts['guidance_generated']} new guidance, "
-                        f"{counts['refused']} refusals logged, {counts['error']} rejected responses."
+                        f"Done — {counts['guidance_generated']} new recommendation(s), "
+                        f"{counts['refused']} time(s) we chose not to act, "
+                        f"{counts['error']} had errors and were skipped."
                     )
                     st.cache_data.clear()
                 except Exception as e:  # noqa: BLE001
-                    st.error(f"Pipeline run failed: {e}")
+                    st.error(f"Something went wrong while checking: {e}")
         col_note.caption(
-            "Evaluates every eligible theme against your portfolio through the full "
-            "compliance gates. New recommendations only appear when conviction, "
-            "fundamentals, and a matched strategy all line up."
+            "Checks every current idea against your holdings and your risk profile. "
+            "You'll only see a new recommendation when experts agree, the numbers "
+            "check out, and there's a real strategy behind it."
         )
 
         rows = fetch_where("portfolio_guidance", {"user_id": user["id"]}, limit=200)
@@ -318,9 +368,9 @@ elif page == "🧭 Guidance":
 
         if not real:
             st.info(
-                "No active recommendations for this user yet — the system refuses "
-                "until multi-expert conviction, fundamentals, and a matched "
-                "strategy all line up."
+                "No current recommendations for this user yet — the system stays "
+                "quiet until multiple experts agree, the financials check out, and "
+                "there's a real strategy to act on."
             )
 
         for g in real:
@@ -346,9 +396,9 @@ elif page == "🧭 Guidance":
                     c3.metric("Status", g.get("status", "active"))
                 else:
                     st.info(
-                        "No allocation change — the system judged the current "
-                        "position appropriately sized for this theme. Holding "
-                        "steady is a deliberate recommendation, not missing data."
+                        "No changes needed — your current position already matches "
+                        "this idea well. Holding steady is a deliberate "
+                        "recommendation, not missing data."
                     )
 
                 # Concrete rupee/share action — the founder's most direct
@@ -378,33 +428,38 @@ elif page == "🧭 Guidance":
                                 st.write(f"• **{inst['entity']}**: ~₹{inst['rupee_amount']:,.0f} ({inst['target_pct']}%){share_txt}")
 
                 if g.get("specific_instruments"):
-                    st.markdown("**Instruments**")
-                    st.dataframe(g["specific_instruments"], use_container_width=True)
+                    st.markdown("**What to hold**")
+                    st.dataframe(
+                        [
+                            {"Stock / Fund": inst.get("entity"), "Target %": inst.get("target_pct")}
+                            for inst in g["specific_instruments"]
+                        ],
+                        use_container_width=True,
+                    )
 
                 if g.get("execution_horizon"):
                     st.markdown(f"**How to execute:** {g['execution_horizon']}")
                 if g.get("position_holding_horizon"):
-                    st.markdown(f"**Holding horizon:** {g['position_holding_horizon']}")
+                    st.markdown(f"**How long to hold:** {g['position_holding_horizon']}")
                 if g.get("funding_source"):
-                    st.markdown(f"**Funded by:** {g['funding_source']}")
+                    st.markdown(f"**Where the money comes from:** {g['funding_source']}")
                 if g.get("tax_note"):
                     st.warning(f"**Tax note:** {g['tax_note']}")
                 if g.get("risks"):
                     st.error(f"**Risks:** {g['risks']}")
 
                 attribution = g.get("attribution") or {}
-                with st.expander("Full attribution (who said what, which strategy, how it was sized)"):
+                with st.expander("Why we're saying this"):
                     direction = attribution.get("direction") or []
                     if direction:
                         st.markdown(
-                            "**Direction from:** "
+                            "**Based on views from:** "
                             + ", ".join(d.get("expert_name", "?") for d in direction)
                         )
                     execution = attribution.get("execution") or {}
                     if execution:
-                        st.markdown(
-                            f"**Execution methodology:** {execution.get('source_name') or execution.get('source_type', '?')}"
-                        )
+                        method_label = execution.get("source_name") or source_type_label(execution.get("source_type"))
+                        st.markdown(f"**Method used:** {method_label}")
                         st.write(execution.get("strategy_text", ""))
                         # Real historical performance — never an invented
                         # forward projection, only what the matched
@@ -412,19 +467,26 @@ elif page == "🧭 Guidance":
                         # (2026-07-12: "what growth can I expect").
                         backtest = execution.get("backtest_summary")
                         if backtest:
-                            st.markdown("**Historical backtest (real, not a forecast):**")
+                            st.markdown("**How this has performed historically (real numbers, not a forecast):**")
                             st.json(backtest)
                         else:
-                            st.caption("No completed backtest for this strategy yet.")
-                    st.markdown(f"**Sizing enforced via:** `{attribution.get('sizing_source', '?')}`")
-                    relevance_bits = [f"Generated {g.get('generated_at', '')}"]
-                    if g.get("relevant_as_of"):
-                        relevance_bits.append(f"relevant as of {g['relevant_as_of']}")
-                    if g.get("review_by"):
-                        relevance_bits.append(f"review by {g['review_by']}")
-                    st.caption(" · ".join(relevance_bits) + f" · guidance id {g['id']}")
+                            st.caption("Not tested against historical data yet.")
+                    st.markdown(f"**Position size:** {sizing_source_label(attribution.get('sizing_source'))}")
 
-        with st.expander(f"Refusal log ({len(refusals)}) — why the system stayed silent"):
+                    created = _parse_date(g.get("generated_at"))
+                    relevant = _parse_date(g.get("relevant_as_of"))
+                    review = _parse_date(g.get("review_by"))
+                    bits = []
+                    if created:
+                        bits.append(f"Created {created.isoformat()}")
+                    if relevant:
+                        bits.append(f"based on analysis from {relevant.isoformat()}")
+                    if review:
+                        bits.append(f"next review around {review.isoformat()}")
+                    if bits:
+                        st.caption(" · ".join(bits))
+
+        with st.expander(f"Times we chose not to act ({len(refusals)})"):
             theme_names = {}
             for r in refusals:
                 tid = r.get("theme_id")
@@ -434,8 +496,9 @@ elif page == "🧭 Guidance":
             st.dataframe(
                 [
                     {
-                        "Theme": theme_names.get(r.get("theme_id"), "?"),
-                        "Reason": r.get("refusal_reason"),
+                        "Idea": theme_names.get(r.get("theme_id"), "?"),
+                        "Why": refusal_reason_label(r.get("refusal_reason")),
+                        "Full detail": r.get("refusal_reason"),
                         "When": str(r.get("generated_at", ""))[:16],
                     }
                     for r in refusals

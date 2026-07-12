@@ -5,6 +5,78 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-13 — Plain-language UI rewrite + per-theme "is there enough to act on?" readiness section
+
+**Decision:** Founder read the Overview and Guidance pages as a general
+user would, not an engineer, and found internal pipeline vocabulary
+leaking straight into the product: "superseded," raw enum values
+(`expert_extracted`, `strategy_allocation_rule`), engineer-facing
+refusal-reason strings ("theme conviction is 'low', requires medium or
+high..."), and over-precise day counts ("1826d remaining"). Separately,
+the founder wanted an honest signal per idea: when the app says a theme
+looks good, does the system actually have a concrete way to invest in
+it, or is it just a thesis with nothing specific behind it yet — the
+exact Layer 8 strategy-matching thinness this session's audits already
+found, but surfaced in the product itself instead of buried in an
+engineering artifact.
+
+**Root cause:** Both problems shared one cause — internal pipeline state
+(stage names, DB enum values, raw counts) was displayed to the user
+unfiltered instead of translated into what it means for them. The fix
+is entirely display-layer; no pipeline, generator, or prompt logic
+changed, and every fact shown was already in the database.
+
+**What shipped:**
+1. **`src/guidance/copy.py`** (new) — pure translation functions:
+   `source_type_label`, `sizing_source_label`,
+   `refusal_reason_label` (categorizes the 6 fixed refusal-reason
+   templates into plain headlines, full detail preserved alongside, not
+   deleted), `humanize_days` (raw day counts → "about 3 months").
+2. **`src/guidance/readiness.py`** (new) — `assess_theme_readiness(theme,
+   top_match, strategy)`: a 5-point checklist (expert agreement,
+   financials checked, a real strategy match exists, real-world track
+   record, named stocks available) assembled entirely from data already
+   fetched for the Overview page plus one cheap existing-table lookup
+   per theme. Overall label is the *worst* of only the two checks that
+   actually gate a concrete recommendation (strategy match + named
+   instruments) — deliberately not an average of all 5, so a thin
+   expert-count or a stretched valuation doesn't obscure an otherwise
+   fully-actionable idea. `broad_equity` (the matcher's generic
+   catch-all, `src/strategies/matcher.py`) is treated as "fair," not
+   "poor" — it's a real match, just not one built for this specific idea.
+3. **`app.py`** — every user-facing label, help tooltip, spinner,
+   success toast, badge, and table header on the Overview and Guidance
+   pages rewritten to plain language via the above helpers; new
+   readiness-checklist expander added under each medium/high-conviction
+   theme card on Overview.
+4. 33 new tests (`tests/test_guidance_copy.py`,
+   `tests/test_guidance_readiness.py`), all passing; full suite 428
+   passing; `ruff check` clean on touched files.
+
+**Verification:** Live browser check (playwright) confirmed zero console
+errors and zero occurrences of banned technical terms ("superseded,"
+raw enum values, etc.) in rendered text on both pages, and the new
+readiness section rendering correctly for all 5 live medium-conviction
+themes with checklist detail visible. One false alarm during
+verification: an early screenshot appeared to show theme cards missing
+entirely — root-caused to this environment's already-known flaky
+Supabase network (`httpx ReadError: Errno 35`, same intermittent issue
+seen elsewhere this session) combined with the readiness section's
+added per-theme DB round-trips taking longer than the original 6s
+verification wait; a longer wait confirmed everything renders correctly
+and no code change was needed.
+
+**What would change this:** If the founder wants the readiness
+checklist to gate anything functionally (e.g. hide a theme card
+entirely below "poor," not just label it) rather than stay purely
+informational.
+
+**Revisit:** Not time-boxed — revisit copy again after the first real
+beta user reads the app, since founder-eyes and beta-user-eyes on
+unfamiliar jargon can diverge.
+
+---
+
 ## 2026-07-12 — Guidance relevance, staleness cascade, and concrete actionability
 
 **Decision:** Founder asked whether guidance events track how relevant they

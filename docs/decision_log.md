@@ -5,6 +5,101 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-12 — Guidance relevance, staleness cascade, and concrete actionability
+
+**Decision:** Founder asked whether guidance events track how relevant they
+are and for how long — investigation found **no structured mechanism
+existed at all**: `portfolio_guidance` had one auto-set timestamp
+(`generated_at`); `execution_horizon`/`position_holding_horizon` were
+free-text LLM prose; `status` defaulted to `'active'` and was never
+programmatically transitioned, not even when the source theme itself got
+superseded. Shipped in one session, verified end-to-end against the live
+production database and a live browser render (not just unit tests):
+
+1. **`migrations/013_guidance_relevance.sql`** — `relevant_as_of` (snapshot
+   of the source theme's `synthesized_at`), `review_by` (deterministic
+   expiry), `stale_reason` (nullable, populated only by programmatic
+   transitions).
+2. **`src/guidance/relevance.py`** — `compute_review_by` derives the
+   expiry from the matched strategy's `holding_horizon_months`, falling
+   back to the theme's `time_horizon_years`, falling back to a new tunable
+   `guidance.default_review_months` (default 12). Pure code, no LLM.
+3. **Supersession cascade** (`src/synthesis/theme_synthesis.py`, at the
+   existing theme-supersession point) — when a theme is superseded, any
+   active/executing real guidance built on it now automatically flips to
+   `status='superseded'` with a populated `stale_reason`. **Proven live**:
+   a real re-synthesis run was triggered specifically to watch 6
+   identified guidance rows flip in real time — all 6 did, exactly as
+   designed.
+4. **One-time backfill** — 8 additional guidance rows that were *already*
+   stale before this fix existed (the cascade only catches future
+   supersessions) were flipped in the same pass. Net effect: **all 14
+   pre-existing real guidance rows were superseded** by this backfill +
+   cascade combined — an honest, if stark, finding: every guidance event
+   in the system before today referenced a theme version that no longer
+   exists. This is exactly why `nifty50`/`crypto_sector` guidance "kept
+   repeating" and why `us_tech_ai` showed both a stale MAINTAIN and a live
+   INTRODUCE_NEW on the genuinely different `us_tech_ai_complex` theme —
+   diagnosed directly from the founder's pasted live UI output.
+5. **`app.py` display**: `relevance_badge()` now returns a 🟢 fresh
+   countdown ("review in Nd"), a ⚠️ past-review warning, or a ⛔ superseded
+   reason — answering "what's the current status and time remaining"
+   directly, not just flagging problems.
+6. **`src/guidance/display.py`** (new, `compute_action_amounts`) — the
+   founder's most emphasized ask: concrete rupee amounts and (where a
+   price is resolvable) approximate share counts for every guidance
+   event, computed from percentages already decided (never a new invented
+   number), using the same portfolio-value convention already shown
+   elsewhere in the app. Gracefully omits share estimates for
+   non-tradeable/unresolvable entities (indices, macro factors) rather
+   than fabricating. Also shows a secondary illustrative "if your
+   portfolio were ₹1,00,000" figure.
+7. **Real backtest evidence surfaced** — `attribution.execution.backtest_summary`
+   existed in every guidance row already (from `src/validation/backtest.py`)
+   but was never rendered in the app. Now shown in the attribution
+   expander — real historical numbers only, never a forward projection.
+8. **Video-processed count added** to the Overview page (Track A/B
+   processed vs. total content pieces) — previously invisible.
+
+**Real bug caught by end-to-end verification, not unit tests:** the
+Supabase client's JSON encoder cannot serialize a raw Python `date`
+object. Every real guidance/refusal insert carrying the new
+`relevant_as_of`/`review_by` fields silently failed (62 of 68 in one real
+run) until `date.isoformat()` conversion was added at the two DB-insert
+call sites in `generator.py` (`relevance.py` itself still returns real
+`date` objects — correct for internal computation/tests, just serialized
+at the write boundary). This is the second time this session an
+end-to-end run surfaced something unit tests alone missed (the first was
+the entity_class normalization gap found during Track-B catchup) —
+reinforces treating "prove it on real data" as a required step, not an
+optional extra, for any change touching the DB write path.
+
+**Consequence the founder should know about:** because every prior
+guidance row is now correctly marked superseded, the Guidance page showed
+zero live guidance until a fresh `run_guidance_generation()` pass was run
+against the current 65-theme batch (which itself required completing the
+fundamentals-check + matcher steps that hadn't been re-run after the
+verification re-synthesis) — 5 new real guidance events generated, 0
+errors, confirmed rendering correctly in a live browser screenshot.
+
+**What would change this:** the `compute_review_by` fallback chain
+prefers long-stated horizons (e.g. a 5-year strategy horizon), which can
+produce multi-year review windows for volatile themes (e.g. crypto) where
+a shorter check-in cadence might be more useful in practice — observed
+directly in the live verification (a BTC guidance row's review_by landed
+5 years out). Not a bug — it's the founder's explicitly chosen design
+("derive from the strategy/theme's own horizon") — but worth revisiting
+if long review windows on volatile themes turn out to be a real usability
+problem once beta users see it.
+
+**Revisit:** Founder review of the 5 newly-generated guidance events (one
+introduces a fresh BTC position, funded by trimming nifty50 — worth a
+sanity check like every other guidance event this session). Consider
+whether `review_by` needs a shorter ceiling for high-volatility entity
+classes.
+
+---
+
 ## 2026-07-11 (night) — Track-B catchup: 176 strategies recovered, entity_class normalization gap found
 
 **Decision:** Strategy-extracted the 125 content pieces that already had real

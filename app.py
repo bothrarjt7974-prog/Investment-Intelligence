@@ -14,6 +14,7 @@ Run with:
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 import streamlit as st
@@ -26,6 +27,7 @@ from src.db.queries import (
     fetch_user_by_email,
     fetch_where,
 )
+from src.guidance.display import compute_action_amounts
 from src.guidance.portfolio_seed import (
     VALID_ASSET_CLASSES,
     VALID_RISK_PROFILES,
@@ -110,6 +112,44 @@ def _suggested_questions(user_email: str) -> list[str]:
     return list(dict.fromkeys(suggestions))[:5]
 
 
+def _parse_date(value: Any) -> date | None:
+    """Coerce a date/ISO-datetime string from the DB into a date, or None."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def relevance_badge(guidance: dict[str, Any]) -> tuple[str, str] | None:
+    """
+    One-line freshness signal for a guidance card — closes the gap where a
+    guidance event a user opens weeks later looked exactly as current as
+    one generated an hour ago (2026-07-12 finding, src/guidance/relevance.py).
+
+    Returns (severity, message) where severity is 'error'|'warning'|'info',
+    or None when there's truly nothing to say (no review_by on record —
+    e.g. rows generated before this feature shipped).
+
+    Always answers "what's the current status and time remaining" — a
+    fresh row gets a quiet positive count-down, not silence, per the
+    founder's direct question (2026-07-12).
+    """
+    if guidance.get("status") == "superseded":
+        reason = guidance.get("stale_reason") or "its source theme has changed"
+        return "error", f"⛔ Superseded — {reason}"
+
+    review_by = _parse_date(guidance.get("review_by"))
+    if review_by is None:
+        return None
+
+    days_left = (review_by - date.today()).days
+    if days_left < 0:
+        return "warning", f"⚠️ Past review date ({review_by.isoformat()}, {-days_left}d ago) — worth a fresh look"
+    return "info", f"🟢 Fresh — review by {review_by.isoformat()} ({days_left}d remaining)"
+
+
 def user_selector(key: str) -> str | None:
     users = load_users()
     if not users:
@@ -163,12 +203,32 @@ if page == "🏠 Overview":
         strong = [t for t in themes if t.get("conviction_level") in ("medium", "high")]
         guidance_all = fetch_where("portfolio_guidance", {}, limit=500)
         real_guidance = [g for g in guidance_all if not g["is_refusal"]]
+        # 2026-07-12: a guidance row's own status matters now that theme
+        # supersession cascades onto it — "14 events" reads as current when
+        # they might all be stale, so split the count.
+        live_guidance = [g for g in real_guidance if g.get("status") not in ("superseded", "completed")]
 
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Active themes", len(themes))
         c2.metric("Multi-expert conviction", len(strong))
-        c3.metric("Guidance events", len(real_guidance))
-        c4.metric("Refusals logged", len(guidance_all) - len(real_guidance))
+        c3.metric("Live guidance", len(live_guidance))
+        c4.metric("Superseded guidance", len(real_guidance) - len(live_guidance))
+        c5.metric("Refusals logged", len(guidance_all) - len(real_guidance))
+
+        pieces_all = fetch_where("content_pieces", {}, limit=1200)
+        track_a_done = sum(1 for p in pieces_all if p.get("processed_at"))
+        track_b_done = sum(1 for p in pieces_all if p.get("strategies_processed_at"))
+        pv1, pv2 = st.columns(2)
+        pv1.metric(
+            "Videos with claims extracted",
+            f"{track_a_done} / {len(pieces_all)}",
+            help="Track A — content pieces run through claim extraction so far. The rest are a deliberate, founder-gated backlog, not stuck.",
+        )
+        pv2.metric(
+            "Videos with strategies extracted",
+            f"{track_b_done} / {len(pieces_all)}",
+            help="Track B — content pieces run through strategy extraction so far.",
+        )
 
         st.subheader("Themes with real expert convergence", divider="gray")
         st.caption(
@@ -275,6 +335,10 @@ elif page == "🧭 Guidance":
             title = f"{icon} {g.get('guidance_type', '?').replace('_', ' ').title()} — {entity_label or '?'}"
             with st.container(border=True):
                 st.markdown(f"### {title}")
+                badge = relevance_badge(g)
+                if badge:
+                    severity, message = badge
+                    {"error": st.error, "warning": st.warning, "info": st.info}[severity](message)
                 if change.get("to_pct") is not None:
                     c1, c2, c3 = st.columns(3)
                     c1.metric("From", f"{change.get('from_pct', '—')}%")
@@ -286,6 +350,32 @@ elif page == "🧭 Guidance":
                         "position appropriately sized for this theme. Holding "
                         "steady is a deliberate recommendation, not missing data."
                     )
+
+                # Concrete rupee/share action — the founder's most direct
+                # ask: not just percentages, but what to actually buy/sell
+                # in real terms. Pure arithmetic on numbers already decided
+                # above, never a new invented figure (src/guidance/display.py).
+                if not g.get("is_refusal") and g.get("status") != "superseded":
+                    portfolio_value, _ = portfolio_value_and_holdings(user["id"])
+                    theme_geo = (fetch_by_id("themes", g["theme_id"]) or {}).get("geography") if g.get("theme_id") else None
+                    amounts = compute_action_amounts(g, portfolio_value or 0.0, theme_geo)
+                    if portfolio_value and (amounts["theme_rupee_change"] or amounts["instruments"]):
+                        st.markdown("**In rupees, on your actual portfolio:**")
+                        if amounts["theme_rupee_change"]:
+                            st.write(f"Approx. ₹{amounts['theme_rupee_change']:,.0f} shift in this theme's allocation.")
+                        for inst in amounts["instruments"]:
+                            share = inst["share_estimate"]
+                            share_txt = f" (~{share['approx_shares']:,.1f} shares @ ₹{share['price']:,.2f})" if share else ""
+                            st.write(f"• **{inst['entity']}**: ~₹{inst['rupee_amount']:,.0f} ({inst['target_pct']}%){share_txt}")
+                    illus = amounts["illustrative"]
+                    if illus["theme_rupee_change"] or illus["instruments"]:
+                        with st.expander("Example: if your portfolio were ₹1,00,000"):
+                            if illus["theme_rupee_change"]:
+                                st.write(f"Approx. ₹{illus['theme_rupee_change']:,.0f} shift in this theme's allocation.")
+                            for inst in illus["instruments"]:
+                                share = inst["share_estimate"]
+                                share_txt = f" (~{share['approx_shares']:,.1f} shares @ ₹{share['price']:,.2f})" if share else ""
+                                st.write(f"• **{inst['entity']}**: ~₹{inst['rupee_amount']:,.0f} ({inst['target_pct']}%){share_txt}")
 
                 if g.get("specific_instruments"):
                     st.markdown("**Instruments**")
@@ -316,8 +406,23 @@ elif page == "🧭 Guidance":
                             f"**Execution methodology:** {execution.get('source_name') or execution.get('source_type', '?')}"
                         )
                         st.write(execution.get("strategy_text", ""))
+                        # Real historical performance — never an invented
+                        # forward projection, only what the matched
+                        # strategy's own backtest already showed
+                        # (2026-07-12: "what growth can I expect").
+                        backtest = execution.get("backtest_summary")
+                        if backtest:
+                            st.markdown("**Historical backtest (real, not a forecast):**")
+                            st.json(backtest)
+                        else:
+                            st.caption("No completed backtest for this strategy yet.")
                     st.markdown(f"**Sizing enforced via:** `{attribution.get('sizing_source', '?')}`")
-                    st.caption(f"Generated {g.get('generated_at', '')} · guidance id {g['id']}")
+                    relevance_bits = [f"Generated {g.get('generated_at', '')}"]
+                    if g.get("relevant_as_of"):
+                        relevance_bits.append(f"relevant as of {g['relevant_as_of']}")
+                    if g.get("review_by"):
+                        relevance_bits.append(f"review by {g['review_by']}")
+                    st.caption(" · ".join(relevance_bits) + f" · guidance id {g['id']}")
 
         with st.expander(f"Refusal log ({len(refusals)}) — why the system stayed silent"):
             theme_names = {}

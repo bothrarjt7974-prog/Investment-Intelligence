@@ -21,6 +21,7 @@ import pendulum
 from loguru import logger
 
 from src.db.queries import (
+    fetch_active_guidance_for_theme,
     fetch_experts_by_ids,
     fetch_synthesizable_claims,
     fetch_where,
@@ -221,6 +222,20 @@ def run_theme_synthesis(window_days: int = 90, max_clusters: int | None = None) 
             for key in {entity, *child_keys}:
                 for existing in fetch_where("themes", {"entity_cluster_key": key, "status": "active"}):
                     update_by_id("themes", existing["id"], {"status": "superseded"})
+                    # Cascade to any real guidance built on the theme being
+                    # replaced — without this, a guidance row stays
+                    # 'active' forever even after its source theme no
+                    # longer exists (2026-07-12 finding; this is what
+                    # produced the PERSISTENT/TECHM duplicate flagged
+                    # 2026-07-10). Refusals are untouched — see
+                    # fetch_active_guidance_for_theme's docstring.
+                    stale_note = f"source theme superseded by re-synthesis on {window_end_date}"
+                    for stale in fetch_active_guidance_for_theme(existing["id"]):
+                        update_by_id(
+                            "portfolio_guidance",
+                            stale["id"],
+                            {"status": "superseded", "stale_reason": stale_note},
+                        )
 
             insert_one("themes", theme_row)
             counts["themes_created"] += 1

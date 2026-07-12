@@ -138,9 +138,10 @@ def test_run_theme_synthesis_creates_supersedes_and_counts_errors(monkeypatch):
         theme_synthesis, "fetch_where", lambda table, filters: [{"id": "old-theme-1"}] if filters.get("entity_cluster_key") == "indian_banking" else []
     )
     monkeypatch.setattr(
-        theme_synthesis, "update_by_id", lambda table, row_id, fields: superseded.append(row_id)
+        theme_synthesis, "update_by_id", lambda table, row_id, fields: superseded.append((table, row_id))
     )
     monkeypatch.setattr(theme_synthesis, "insert_one", lambda table, row: inserted.append(row))
+    monkeypatch.setattr(theme_synthesis, "fetch_active_guidance_for_theme", lambda theme_id: [])
 
     counts = theme_synthesis.run_theme_synthesis()
 
@@ -148,8 +149,48 @@ def test_run_theme_synthesis_creates_supersedes_and_counts_errors(monkeypatch):
     assert counts["clusters_skipped"] == 1
     assert counts["errors"] == 1
     assert counts["total_claims"] == 4
-    assert superseded == ["old-theme-1"]
+    assert superseded == [("themes", "old-theme-1")]
     assert inserted == [{"entity_cluster_key": "indian_banking", "summary_thesis": "x"}]
+
+
+def test_run_theme_synthesis_cascades_supersession_to_active_guidance(monkeypatch):
+    """A theme being superseded must flip any active, non-refusal guidance
+    built on it — otherwise that guidance stays 'active' forever even
+    after its source theme no longer exists (2026-07-12 finding)."""
+    claims = [{"id": "c1", "entity": "indian_banking", "expert_id": "e1"}]
+    monkeypatch.setattr(theme_synthesis, "fetch_synthesizable_claims", lambda window_days: claims)
+    monkeypatch.setattr(
+        theme_synthesis, "synthesize_cluster",
+        # Supersession only runs once a replacement theme actually exists
+        # to insert — must return a real row, not None.
+        lambda entity, cluster_claims, window_start, window_end: {
+            "entity_cluster_key": entity, "summary_thesis": "x",
+        },
+    )
+    monkeypatch.setattr(
+        theme_synthesis, "fetch_where",
+        lambda table, filters: [{"id": "old-theme-1"}] if filters.get("entity_cluster_key") == "indian_banking" else [],
+    )
+    monkeypatch.setattr(
+        theme_synthesis, "fetch_active_guidance_for_theme",
+        lambda theme_id: [{"id": "g1"}, {"id": "g2"}] if theme_id == "old-theme-1" else [],
+    )
+    updates: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(
+        theme_synthesis, "update_by_id",
+        lambda table, row_id, fields: updates.append((table, row_id, fields)),
+    )
+    monkeypatch.setattr(theme_synthesis, "insert_one", lambda table, row: None)
+
+    theme_synthesis.run_theme_synthesis()
+
+    theme_update = [u for u in updates if u[0] == "themes"]
+    guidance_updates = [u for u in updates if u[0] == "portfolio_guidance"]
+    assert theme_update == [("themes", "old-theme-1", {"status": "superseded"})]
+    assert {u[1] for u in guidance_updates} == {"g1", "g2"}
+    for _, _, fields in guidance_updates:
+        assert fields["status"] == "superseded"
+        assert "superseded by re-synthesis" in fields["stale_reason"]
 
 
 def test_run_theme_synthesis_respects_max_clusters(monkeypatch):
@@ -169,6 +210,7 @@ def test_run_theme_synthesis_respects_max_clusters(monkeypatch):
     monkeypatch.setattr(theme_synthesis, "fetch_where", lambda table, filters: [])
     monkeypatch.setattr(theme_synthesis, "update_by_id", lambda table, row_id, fields: None)
     monkeypatch.setattr(theme_synthesis, "insert_one", lambda table, row: None)
+    monkeypatch.setattr(theme_synthesis, "fetch_active_guidance_for_theme", lambda theme_id: [])
 
     counts = theme_synthesis.run_theme_synthesis(max_clusters=1)
 

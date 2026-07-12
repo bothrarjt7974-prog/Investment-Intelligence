@@ -494,6 +494,20 @@ PARAMETERS: dict[str, TuningParameter] = {
             lower_effect="System goes quiet sooner — more refusals.",
         ),
         _P(
+            key="guidance.default_review_months",
+            layer="Layer 9 · Guidance",
+            title="Default 'time to review' when nothing else states one",
+            default=12, min_value=1, max_value=60, step=1, unit="months",
+            plain=(
+                "Every piece of guidance gets a 'review by' date so it doesn't look "
+                "as fresh six months later as it did the day it was generated. This "
+                "is the fallback used only when neither the matched strategy nor the "
+                "theme itself states a holding period — those are always preferred."
+            ),
+            raise_effect="Guidance without a stated horizon stays flagged 'current' longer.",
+            lower_effect="Guidance without a stated horizon gets flagged for review sooner.",
+        ),
+        _P(
             key="sizing.conservative_max_position_pct",
             layer="Layer 9 · Guidance",
             title="Conservative: max theme position",

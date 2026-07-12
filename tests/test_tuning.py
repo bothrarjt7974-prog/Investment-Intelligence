@@ -24,6 +24,7 @@ def test_defaults_match_shipped_values(tmp_overrides):
     assert param("quality.out_of_scope_horizon_months") == 7  # raised from 6 in the 2026-07-09 audit
     assert param("themes.medium_min_signal") == 2.0
     assert param("sizing.conservative_max_position_pct") == 5.0
+    assert param("guidance.default_review_months") == 12
 
 
 def test_override_roundtrip(tmp_overrides):

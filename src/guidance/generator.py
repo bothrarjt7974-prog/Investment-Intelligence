@@ -38,6 +38,7 @@ from src.guidance.eligibility import (
     check_entity_overlap_guidance,
     check_theme_eligible,
 )
+from src.guidance.relevance import compute_review_by, relevant_as_of
 from src.guidance.sizing import apply_sizing_gate
 from src.llm.claude_client import claude
 
@@ -147,6 +148,12 @@ def _holdings_block(holdings: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _iso(value: Any) -> str | None:
+    """`date` -> ISO string for DB insertion; the Supabase client's JSON
+    encoder cannot serialize a raw `date` object (2026-07-12 finding)."""
+    return value.isoformat() if value is not None else None
+
+
 def _refusal(
     user_id: str, portfolio_id: str, theme: dict[str, Any], reason: str
 ) -> dict[str, Any]:
@@ -169,6 +176,15 @@ def _refusal(
         "is_refusal": True,
         "refusal_reason": reason,
         "status": "active",
+        # Snapshot only — refusals don't carry an "in effect" period, so
+        # review_by stays NULL (see src/guidance/relevance.py). Serialized
+        # to ISO strings here, not left as `date` objects — the Supabase
+        # client's JSON encoder can't serialize `date` (2026-07-12 finding:
+        # every real insert with these fields populated silently failed
+        # until this conversion was added).
+        "relevant_as_of": _iso(relevant_as_of(theme)),
+        "review_by": None,
+        "stale_reason": None,
     }
 
 
@@ -220,6 +236,11 @@ def generate_guidance_for_portfolio(portfolio: dict[str, Any], theme: dict[str, 
         "user_tax_notes": str(portfolio.get("tax_notes") or "none provided"),
     }
 
+    # Computed before the LLM call — pure code, same "code does mechanics"
+    # split as build_attribution/apply_sizing_gate (src/guidance/relevance.py).
+    generated_date = pendulum.now("UTC").date()
+    review_by_date = compute_review_by(generated_date, matched_strategy, theme)
+
     response = claude.synthesize(prompt_name="guidance_generation_v1", content="", variables=variables)
     payload = parse_guidance_response(response)
     payload, sizing_source = apply_sizing_gate(
@@ -245,6 +266,9 @@ def generate_guidance_for_portfolio(portfolio: dict[str, Any], theme: dict[str, 
         "is_refusal": False,
         "refusal_reason": None,
         "status": "active",
+        "relevant_as_of": _iso(relevant_as_of(theme)),
+        "review_by": _iso(review_by_date),
+        "stale_reason": None,
     }
 
 

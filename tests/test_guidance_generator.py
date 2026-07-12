@@ -151,6 +151,9 @@ class TestGenerateGuidanceRefusalPaths:
 
         assert result["is_refusal"] is True
         assert "conviction" in result["refusal_reason"]
+        # 2026-07-12: refusals get relevant_as_of but never review_by —
+        # they don't carry an "in effect" period.
+        assert result["review_by"] is None
 
     def test_no_matched_strategy_refused_without_llm_call(self, monkeypatch):
         self._fail_if_llm_called(monkeypatch)
@@ -206,6 +209,26 @@ class TestGenerateGuidanceHappyPath:
         assert result["guidance_type"] == "INCREASE_EXPOSURE"
         assert result["matched_strategy_id"] == "strategy-1"
         assert result["attribution"]["execution"]["strategy_id"] == "strategy-1"
+        # 2026-07-12: relevance fields — no synthesized_at on make_theme(),
+        # so relevant_as_of is None; review_by falls through to the
+        # tunable default since neither strategy nor theme states a horizon.
+        assert result["relevant_as_of"] is None
+        assert result["review_by"] is not None
+        assert result["stale_reason"] is None
+
+    def test_relevant_as_of_snapshots_theme_synthesis_date(self, monkeypatch):
+        strategy = make_strategy()
+        monkeypatch.setattr(generator, "fetch_best_strategy_match", lambda theme_id: strategy)
+        monkeypatch.setattr(generator, "check_duplicate_guidance", lambda theme_id, portfolio_id: False)
+        monkeypatch.setattr(generator, "check_entity_overlap_guidance", lambda theme, portfolio_id: None)
+        monkeypatch.setattr(generator, "fetch_portfolio_holdings", lambda portfolio_id: [])
+        monkeypatch.setattr(generator, "check_already_aligned", lambda theme, holdings: False)
+        monkeypatch.setattr(generator.claude, "synthesize", lambda **kwargs: VALID_RESPONSE)
+
+        theme = make_theme(synthesized_at="2026-07-09T06:45:38+00:00")
+        result = generate_guidance_for_portfolio(make_portfolio(), theme)
+
+        assert str(result["relevant_as_of"]) == "2026-07-09"
 
 
 # =====================================================================

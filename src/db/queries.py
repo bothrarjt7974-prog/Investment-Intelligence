@@ -459,6 +459,27 @@ def fetch_active_guidance(theme_id: str, portfolio_id: str) -> list[dict[str, An
     return response.data or []
 
 
+def fetch_active_guidance_for_theme(theme_id: str) -> list[dict[str, Any]]:
+    """
+    Return active/executing REAL guidance across ALL portfolios for one
+    theme — the theme-supersession cascade
+    (src/synthesis/theme_synthesis.py) uses this to flip any guidance
+    built on a theme that's about to be replaced, rather than leaving it
+    looking as current as guidance generated an hour ago
+    (2026-07-12 finding). is_refusal=False for the same reason as
+    fetch_active_guidance above — refusals don't need this treatment.
+    """
+    response = (
+        supabase.table("portfolio_guidance")
+        .select("id")
+        .eq("theme_id", theme_id)
+        .eq("is_refusal", False)
+        .in_("status", ["active", "executing"])
+        .execute()
+    )
+    return response.data or []
+
+
 def fetch_active_refusal(theme_id: str, portfolio_id: str, reason: str) -> list[dict[str, Any]]:
     """
     Return active refusal rows for one theme+portfolio with this exact

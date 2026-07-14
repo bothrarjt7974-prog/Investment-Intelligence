@@ -24,6 +24,15 @@ from src.config.tuning import param
 from src.extraction.normalization import NOT_TICKERS, TICKER_PATTERN
 from src.validation.entity_symbol_map import PRIVATE_ENTITIES, resolve_entity
 
+# Crypto trades and has a price series (needed for backtesting/validation
+# elsewhere), so it's kept ticker-shaped and uppercase by normalize_entity —
+# but it has no company fundamentals (no P/E, no balance sheet) to check.
+# Excluded here the same way PRIVATE_ENTITIES is, so these land on
+# 'not_applicable' instead of 'insufficient_data' (found 2026-07-14: crypto
+# themes were showing "financials not checked" when the honest answer is
+# "there's nothing to check").
+NO_COMPANY_FUNDAMENTALS_ENTITIES = frozenset({"BTC", "ETH"})
+
 # Canonical sector entity -> representative tickers already known in
 # ENTITY_SYMBOL_MAP. v1 seed list covering the sectors that map already
 # defines — grow over time as themes surface sectors not covered here,
@@ -110,18 +119,20 @@ def resolve_target_instruments(theme: dict[str, Any]) -> list[str]:
          'not_applicable' rather than fabricating an opinion about
          instruments nobody named.
     """
-    # Private companies (OpenAI, SpaceX...) have no filings/price series —
-    # excluded up front so a theme about them lands on 'not_applicable'
-    # instead of chasing tickers that don't exist.
+    # Private companies (OpenAI, SpaceX...) have no filings/price series, and
+    # crypto has a price series but no company fundamentals — both excluded
+    # up front so a theme about them lands on 'not_applicable' instead of
+    # chasing a snapshot that will never exist.
+    excluded = PRIVATE_ENTITIES | NO_COMPANY_FUNDAMENTALS_ENTITIES
     instruments_mentioned = [
-        i for i in (theme.get("instruments_mentioned") or []) if i not in PRIVATE_ENTITIES
+        i for i in (theme.get("instruments_mentioned") or []) if i not in excluded
     ]
     resolved = [i for i in instruments_mentioned if _looks_like_ticker(i)]
     if resolved:
         return resolved
 
     entity_cluster_key = theme.get("entity_cluster_key")
-    if _looks_like_ticker(entity_cluster_key) and entity_cluster_key not in PRIVATE_ENTITIES:
+    if _looks_like_ticker(entity_cluster_key) and entity_cluster_key not in excluded:
         return [entity_cluster_key]
 
     return []

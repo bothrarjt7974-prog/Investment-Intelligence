@@ -44,6 +44,18 @@ class TestResolveTargetInstruments:
         theme = {"entity_cluster_key": "AAPL", "instruments_mentioned": ["us_tech"]}
         assert resolve_target_instruments(theme) == ["AAPL"]
 
+    def test_crypto_instrument_excluded_despite_ticker_shape(self):
+        # BTC/ETH are kept uppercase and ticker-shaped by normalize_entity
+        # (they have a price series for backtesting), but they have no
+        # company fundamentals to check — found 2026-07-14: crypto_sector
+        # was landing on 'insufficient_data' instead of 'not_applicable'.
+        theme = {"entity_cluster_key": "crypto_sector", "instruments_mentioned": ["BTC"]}
+        assert resolve_target_instruments(theme) == []
+
+    def test_crypto_entity_cluster_key_excluded_despite_ticker_shape(self):
+        theme = {"entity_cluster_key": "BTC", "instruments_mentioned": []}
+        assert resolve_target_instruments(theme) == []
+
 
 # =====================================================================
 # SECTOR-RELATIVE PE

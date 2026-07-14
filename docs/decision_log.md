@@ -5,6 +5,71 @@ Every entry follows the same structure. Add new entries at the top.
 
 ---
 
+## 2026-07-14 — Why guidance isn't conclusive yet: full diagnostic, two zero-cost batch catch-ups, one bug fixed
+
+**Decision:** Founder asked directly why the system isn't producing
+conclusive, actionable guidance despite tracking credible experts — is it
+bad experts, or missing data? Ran a full live-data audit (not from memory/
+docs) to answer with real numbers instead of a general explanation.
+
+**Findings:**
+1. **Not an expert-quality problem — a depth-imbalance problem.** Akshat
+   Shrivastava has 866 pieces / 480 claims / 193 strategies; the other 9
+   experts combined have 114 pieces. Only 5 of 76 active themes reach
+   "medium" conviction, zero reach "high," because convergence needs 2-3+
+   experts independently agreeing and most experts simply haven't been
+   mined deep enough yet to have an opinion on most things.
+2. **The strategy library is the single biggest bottleneck to specificity**
+   — bigger than expert count. 62% of the 221 strategies (137) are tagged
+   with the generic `broad_equity` fallback, not built for any specific
+   theme. Across all 76 active themes, 50 have zero strategy match at all;
+   of the 26 that match something, only 4 match a class-specific strategy.
+3. **7 of 10 experts have zero claims whose target_date has even arrived
+   yet** — Pranjal Kamra, Ankur Warikoo, CA Rachana Ranade, Labour Law
+   Advisor, Graham Stephan, Andrei Jikh, Nikhil Kamath. Not a processing
+   backlog — their ingested content is too recent for any prediction to
+   have come due. No amount of running the validator can fix this; only
+   backfilling *older* content from them can.
+4. **Bug found and fixed**: `resolve_target_instruments`
+   (`src/fundamentals/data.py`) treated BTC/ETH as resolvable company
+   tickers (they're kept uppercase/ticker-shaped for price-series
+   purposes elsewhere), tried to fetch fundamentals data that will never
+   exist for a cryptocurrency, and landed on `insufficient_data` instead
+   of the honest `not_applicable`. Fixed with a `NO_COMPANY_FUNDAMENTALS_
+   ENTITIES` exclusion set (same pattern as `PRIVATE_ENTITIES`), 2 new
+   regression tests, and live-corrected the real `crypto_sector` theme's
+   stored verdict via `check_one_theme`.
+5. **Bug found, not yet fixed (needs a decision, touches raw extraction
+   provenance)**: the `indian_banking` theme's incoherent thesis (an
+   HDFC Bank compounding claim clustered with an unrelated Airtel/Jio
+   telecom ARPU observation) traces to a single claim
+   (`1409e92a-6f8f-48e9-8c38-c08e7afc71ef`) whose `entity` field was
+   extracted as `"indian_banking"` when the claim text is plainly about
+   telecom — a Track A extraction mistake, not a clustering-logic bug.
+   Left uncorrected pending founder decision on whether to hand-correct
+   the field or trigger re-extraction, since silently overwriting an
+   extracted `entity` value bypasses the pipeline's own audit trail.
+6. **Two zero-cost batch catch-ups run** (`src/validation/backtest`,
+   `src/validation/validator` — both pure market-data/pandas, no LLM
+   calls, safe to run at any scale): resolved claims 63 → 136 (6.6% →
+   14.2% of 958), strategies with completed backtests 17 → 88 (7.7% →
+   39.8% of 221). These batch jobs simply hadn't been run past their
+   original small test-mode invocations. `src/strategies/historical_
+   patterns.py` (also zero-cost, detects repeated expert methodology in
+   already-extracted strategies) was also run at full scale and produced
+   0 new strategies — not a quick win; no expert's strategies currently
+   repeat similarly enough to cluster, checked and ruled out rather than
+   left unverified.
+
+**What would change this:** See the priority order below — this entry
+exists so the roadmap is traceable to the evidence, not vibes.
+
+**Revisit:** After the founder decides on old-content backfill scope
+(the highest-leverage remaining item) and the `indian_banking` claim
+correction.
+
+---
+
 ## 2026-07-13 — Plain-language UI rewrite + per-theme "is there enough to act on?" readiness section
 
 **Decision:** Founder read the Overview and Guidance pages as a general

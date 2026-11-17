@@ -221,6 +221,12 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "us_inflation": (None, "manual"),
     "india_gdp": (None, "manual"),
     "us_gdp": (None, "manual"),
+    # --- 2026-11-18 rescue batch: entities stuck at data_unavailable ---
+    # VEDANTA.NS does not exist; the correct NSE symbol for Vedanta Ltd is VEDL.NS.
+    "VEDANTA": ("VEDL.NS", "yfinance"),
+    # indian_airlines: IndiGo (INDIGO.NS) is ~60% domestic aviation by seats;
+    # sector-wide claims will be proxied here — flag correctness with skepticism.
+    "indian_airlines": ("INDIGO.NS", "yfinance"),
 }
 
 # Abstract macro/geopolitical entities that claims reference but that have no
@@ -242,6 +248,11 @@ UNMAPPABLE: frozenset[str] = frozenset(
         # The Tata *group* (a conglomerate, ~25 listed companies) — no single
         # series. Specific companies (TCS, TATAMOTORS) are mapped individually.
         "TATA",
+        # 2026-11-18: sector concept with no clean single-series proxy.
+        "indian_consumer_tech",
+        # Small/likely-delisted company; DYNACAB.NS returns 404. If a real
+        # NSE-listed company surfaces with this name, add to ENTITY_SYMBOL_MAP.
+        "DYNACAB",
     }
 )
 

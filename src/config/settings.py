@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     # --- Anthropic ---
     anthropic_api_key: str = Field(..., description="Claude API key")
     claude_model_bulk: str = Field(
-        default="claude-sonnet-4-6",
+        default="claude-sonnet-5-5",
         description="Model used for bulk claim extraction and classification",
     )
     claude_model_synthesis: str = Field(
-        default="claude-opus-4-7",
+        default="claude-opus-5-5",
         description="Model used for final synthesis and briefing generation",
     )
 
@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     # Whisper execution mode: 'api' (pay per minute) or 'local' (run on own GPU)
     whisper_mode: Literal["api", "local"] = Field(default="api")
     # Vision model to use for frame extraction in phase two
-    vision_model: str = Field(default="claude-opus-4-7")
+    vision_model: str = Field(default="claude-opus-5-5")
 
     # --- Optional ---
     sentry_dsn: str = Field(default="")

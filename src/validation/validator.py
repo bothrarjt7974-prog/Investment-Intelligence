@@ -22,7 +22,12 @@ import pendulum
 from loguru import logger
 
 from src.config.tuning import param
-from src.db.queries import fetch_validatable_claims, update_by_id
+from src.db.queries import (
+    fetch_data_unavailable_claims,
+    fetch_earliest_snapshot_date,
+    fetch_validatable_claims,
+    update_by_id,
+)
 from src.internal.scoring import recompute_all_experts
 from src.validation.entity_symbol_map import resolve_entity
 from src.validation.market_data import ensure_symbol_backfilled, price_on, price_series
@@ -233,7 +238,9 @@ def validate_one_claim(claim: dict[str, Any]) -> dict[str, Any] | None:
     # .NS/bare-ticker fallback in resolve_entity(). No-ops if data already
     # exists. Manual-source entities come from CSVs, not yfinance — nothing
     # to backfill on demand for those.
-    if source == "yfinance" and not ensure_symbol_backfilled(symbol, fetch_symbol):
+    if source == "yfinance" and not ensure_symbol_backfilled(
+        symbol, fetch_symbol, needed_from=_to_date_str(claimed_at)
+    ):
         logger.info(f"Claim {claim_id}: no market data available for '{symbol}' ({fetch_symbol})")
         return {"verification_status": "data_unavailable", "verified_at": now}
 
@@ -320,13 +327,57 @@ def validate_one_claim(claim: dict[str, Any]) -> dict[str, Any] | None:
     return {"verification_status": result, "verification_outcome": outcome, "verified_at": now}
 
 
+# Upper bound for a full (max_claims=None) run. The previous default of 100
+# silently capped every nightly run — a backlog larger than that drained one
+# hundred claims per night and looked like "validation is done" in between.
+# 1000 is PostgREST's per-request ceiling.
+FULL_RUN_LIMIT = 1000
+
+
+def requeue_resolvable_unavailable() -> int:
+    """
+    Reset data_unavailable claims to pending when their entity now resolves.
+
+    WHY: resolve_entity() improves over time (new ENTITY_SYMBOL_MAP entries),
+    but data_unavailable used to be terminal — a claim about ZOMATO checked
+    the day before ZOMATO was mapped stayed unscored forever, starving
+    credibility of real outcomes. Only the resolvability check runs here (no
+    network); if the price series still can't be fetched, the normal
+    validation path parks the claim at data_unavailable again.
+    """
+    requeued = 0
+    earliest_cache: dict[str, str | None] = {}
+    for claim in fetch_data_unavailable_claims():
+        entity = claim.get("entity")
+        resolved = resolve_entity(entity, claim.get("geography"))
+        if resolved is None:
+            continue
+        if entity not in earliest_cache:
+            earliest_cache[entity] = fetch_earliest_snapshot_date(entity)
+        earliest = earliest_cache[entity]
+        if resolved[1] == "manual" and earliest is None:
+            continue  # no CSV loaded for this macro series — nothing new to try
+        claimed = claim.get("claimed_at")
+        if earliest is not None and claimed and earliest > _to_date_str(claimed):
+            # History exists but starts after the claim: a pre-listing call
+            # (e.g. a 2021 Zomato/Paytm IPO prediction). Re-fetching every
+            # night can't create prices from before the stock existed.
+            continue
+        update_by_id("claims", claim["id"], {"verification_status": "pending"})
+        requeued += 1
+    if requeued:
+        logger.info(f"Requeued {requeued} data_unavailable claims whose entity now resolves")
+    return requeued
+
+
 def run_validation(max_claims: int | None = None) -> dict[str, int]:
     """
-    Validate claims where quality_verdict='pass', verification_status is
-    pending/null, and target_date has passed. Recomputes all expert
+    Validate claims where quality_verdict is pass/partial, verification_status
+    is pending/null, and target_date has passed. Recomputes all expert
     credibility scores at the end of the batch.
     """
-    claims = fetch_validatable_claims(limit=max_claims or 100)
+    requeue_resolvable_unavailable()
+    claims = fetch_validatable_claims(limit=max_claims or FULL_RUN_LIMIT)
     logger.info(f"Found {len(claims)} validatable claims")
 
     counts = {
@@ -335,6 +386,7 @@ def run_validation(max_claims: int | None = None) -> dict[str, int]:
         "incorrect": 0,
         "opinion_only": 0,
         "data_unavailable": 0,
+        "conditional_unresolved": 0,
         "error": 0,
         "total": len(claims),
     }
@@ -362,7 +414,8 @@ def run_validation(max_claims: int | None = None) -> dict[str, int]:
     logger.info(
         f"Validation complete: correct={counts['correct']} partial={counts['partial']} "
         f"incorrect={counts['incorrect']} opinion_only={counts['opinion_only']} "
-        f"data_unavailable={counts['data_unavailable']} errors={counts['error']} "
+        f"data_unavailable={counts['data_unavailable']} "
+        f"conditional_unresolved={counts['conditional_unresolved']} errors={counts['error']} "
         f"(of {counts['total']})"
     )
 

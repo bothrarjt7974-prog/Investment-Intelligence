@@ -25,7 +25,9 @@ import yfinance as yf
 from loguru import logger
 
 from src.db.queries import (
+    fetch_earliest_snapshot_date,
     fetch_latest_market_price,
+    fetch_latest_snapshot_date,
     fetch_market_price_series,
     symbol_has_market_data,
     upsert_many,
@@ -130,7 +132,10 @@ def backfill_symbol(
 
 
 def ensure_symbol_backfilled(
-    symbol: str, fetch_symbol: str, start_date: str = "2019-01-01"
+    symbol: str,
+    fetch_symbol: str,
+    start_date: str = "2019-01-01",
+    needed_from: str | None = None,
 ) -> bool:
     """
     On-demand single-symbol backfill for entities resolved via
@@ -147,9 +152,20 @@ def ensure_symbol_backfilled(
     back to data_unavailable, and the "no data returned" log is exactly the
     signal that this entity needs a curated map correction, as ZOMATO.NS
     and TATAMOTORS.NS did).
+
+    `needed_from` (a claim's date) makes "has rows" mean "has rows going
+    back far enough". Without it, a symbol that only ever received a recent
+    incremental update looked covered while every older claim on it had no
+    starting price — 67 mapped symbols were in exactly that state on
+    2026-10-05.
     """
-    if symbol_has_market_data(symbol):
-        return True
+    if needed_from is None:
+        if symbol_has_market_data(symbol):
+            return True
+    else:
+        earliest = fetch_earliest_snapshot_date(symbol)
+        if earliest is not None and earliest <= needed_from:
+            return True
 
     logger.info(f"'{symbol}' has no market_data yet — on-demand backfill from {fetch_symbol}")
     written, error = backfill_symbol(symbol, fetch_symbol, start_date)
@@ -204,14 +220,19 @@ def backfill_all(
 
 def daily_update() -> dict[str, dict[str, Any]]:
     """
-    Fetch the last 7 days for every yfinance symbol and upsert.
+    Fetch every yfinance symbol from just before the newest stored row.
 
-    7-day overlap tolerates a missed cron run without creating gaps. Manual
-    CSV entities are not touched here — those are updated by re-running
-    --load-manual when new official data is published.
+    Resumes from the latest snapshot_date (minus a 7-day overlap) rather than
+    a fixed "last 7 days": when the cron stopped for three months (Jul-Oct
+    2026), a fixed window left a permanent hole that silently broke every
+    claim validation and backtest landing in it. Manual CSV entities are not
+    touched here — those are updated by re-running --load-manual when new
+    official data is published.
     """
-    start_date = pendulum.now("UTC").subtract(days=7).to_date_string()
-    return backfill_all(start_date=start_date)
+    week_ago = pendulum.now("UTC").subtract(days=7)
+    latest = fetch_latest_snapshot_date()
+    start = week_ago if latest is None else min(week_ago, pendulum.parse(latest).subtract(days=7))
+    return backfill_all(start_date=start.to_date_string())
 
 
 def load_manual_csv(path: str, symbol: str) -> int:

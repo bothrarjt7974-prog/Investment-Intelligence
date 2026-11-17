@@ -50,25 +50,50 @@ def _add_months(base: date, months: int) -> date:
     return base + timedelta(days=int(months * 30.44))
 
 
+# Entity keys whose price can move by half in a quarter — they get the
+# tighter guidance.volatile_max_review_months cap. Matches the crypto keys
+# used in ENTITY_SYMBOL_MAP / theme entity_cluster_key.
+VOLATILE_ENTITIES: frozenset[str] = frozenset({"crypto_sector", "BTC", "ETH", "SOL"})
+
+
+def _horizon_months(
+    matched_strategy: dict[str, Any] | None, theme: dict[str, Any] | None
+) -> int:
+    """The idea's own stated horizon: strategy, then theme, then the default."""
+    if matched_strategy and matched_strategy.get("holding_horizon_months"):
+        return int(matched_strategy["holding_horizon_months"])
+    if theme and theme.get("time_horizon_years"):
+        return round(float(theme["time_horizon_years"]) * 12)
+    return int(param("guidance.default_review_months"))
+
+
 def compute_review_by(
     generated_at: date,
     matched_strategy: dict[str, Any] | None,
     theme: dict[str, Any] | None,
 ) -> date:
     """
-    Deterministic expiry date, in priority order:
+    Deterministic expiry date: the idea's stated horizon, capped.
+
+    Horizon, in priority order:
       1. The matched strategy's own stated holding_horizon_months.
       2. The theme's own stated time_horizon_years.
       3. A tunable fallback default (guidance.default_review_months) —
          used only when neither the strategy nor the theme states a
          horizon, which real data shows does happen (e.g. an
          entry-methodology strategy with no holding period stated).
+
+    Then capped at guidance.max_review_months (volatile_max_review_months
+    for crypto). WHY: a holding horizon is how long to hold, not how long
+    until the advice should be re-checked. Uncapped, real July 2026 guidance
+    got review_by dates in 2031-2034 and still showed as "fresh" three
+    months later, after every input behind it had gone stale.
     """
-    if matched_strategy and matched_strategy.get("holding_horizon_months"):
-        return _add_months(generated_at, int(matched_strategy["holding_horizon_months"]))
-
-    if theme and theme.get("time_horizon_years"):
-        months = round(float(theme["time_horizon_years"]) * 12)
-        return _add_months(generated_at, months)
-
-    return _add_months(generated_at, int(param("guidance.default_review_months")))
+    entity = (theme or {}).get("entity_cluster_key")
+    cap_key = (
+        "guidance.volatile_max_review_months"
+        if entity in VOLATILE_ENTITIES
+        else "guidance.max_review_months"
+    )
+    months = min(_horizon_months(matched_strategy, theme), int(param(cap_key)))
+    return _add_months(generated_at, months)

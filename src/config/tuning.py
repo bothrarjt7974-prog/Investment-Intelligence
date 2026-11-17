@@ -508,6 +508,33 @@ PARAMETERS: dict[str, TuningParameter] = {
             lower_effect="Guidance without a stated horizon gets flagged for review sooner.",
         ),
         _P(
+            key="guidance.max_review_months",
+            layer="Layer 9 · Guidance",
+            title="Longest guidance can go without a review",
+            default=6, min_value=1, max_value=36, step=1, unit="months",
+            plain=(
+                "How long you plan to HOLD an idea and how long until you CHECK it "
+                "again are different things. A 5-year holding horizon should still "
+                "be re-checked against fresh expert views and prices well before "
+                "then. Every 'review by' date is capped at this many months."
+            ),
+            raise_effect="Long-horizon guidance stays flagged 'current' longer.",
+            lower_effect="All guidance gets flagged for a re-check sooner.",
+        ),
+        _P(
+            key="guidance.volatile_max_review_months",
+            layer="Layer 9 · Guidance",
+            title="Review cap for volatile assets (crypto)",
+            default=3, min_value=1, max_value=12, step=1, unit="months",
+            plain=(
+                "Tighter review cap for asset classes that can move 50% in a "
+                "quarter (crypto). A crypto idea checked in July shouldn't still "
+                "look current in October."
+            ),
+            raise_effect="Crypto guidance stays flagged 'current' longer.",
+            lower_effect="Crypto guidance gets flagged for a re-check sooner.",
+        ),
+        _P(
             key="sizing.conservative_max_position_pct",
             layer="Layer 9 · Guidance",
             title="Conservative: max theme position",

@@ -17,10 +17,10 @@ extraction later requires zero changes downstream.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class TranscriptSource(str, Enum):
+class TranscriptSource(StrEnum):
     """How a transcript was obtained."""
 
     YOUTUBE_AUTO = "youtube_auto"      # MVP: auto-captions
@@ -28,7 +28,7 @@ class TranscriptSource(str, Enum):
     WHISPER = "whisper"                # phase 2: re-transcribed
 
 
-class EnrichmentTier(str, Enum):
+class EnrichmentTier(StrEnum):
     """How richly a content piece was processed."""
 
     TIER1_TRANSCRIPT = "tier1_transcript"  # MVP: transcript only

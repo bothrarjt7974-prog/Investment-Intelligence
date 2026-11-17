@@ -133,6 +133,32 @@ def symbol_has_market_data(symbol: str) -> bool:
     return bool(response.data)
 
 
+def fetch_earliest_snapshot_date(symbol: str) -> str | None:
+    """Oldest snapshot_date stored for one symbol, or None if it has no rows."""
+    response = (
+        supabase.table("market_data")
+        .select("snapshot_date")
+        .eq("symbol", symbol)
+        .order("snapshot_date")
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["snapshot_date"] if response.data else None
+
+
+def fetch_latest_snapshot_date() -> str | None:
+    """Most recent snapshot_date across all yfinance market_data, or None if empty."""
+    response = (
+        supabase.table("market_data")
+        .select("snapshot_date")
+        .eq("source", "yfinance")
+        .order("snapshot_date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["snapshot_date"] if response.data else None
+
+
 def fetch_latest_market_price(
     symbol: str, on_or_before: str, earliest: str
 ) -> dict[str, Any] | None:
@@ -185,6 +211,30 @@ def fetch_validatable_claims(limit: int = 100) -> list[dict[str, Any]]:
         .execute()
     )
     return response.data or []
+
+
+def fetch_data_unavailable_claims() -> list[dict[str, Any]]:
+    """
+    Every claim parked at verification_status='data_unavailable'.
+
+    That status was terminal until 2026-10-05: claims checked before their
+    entity got an ENTITY_SYMBOL_MAP entry stayed unscored forever. The
+    validator re-checks these each run and requeues the ones that now resolve.
+    """
+    rows: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        page = (
+            supabase.table("claims")
+            .select("id,entity,geography,claimed_at")
+            .eq("verification_status", "data_unavailable")
+            .range(start, start + 999)
+            .execute()
+        ).data or []
+        rows.extend(page)
+        if len(page) < 1000:
+            return rows
+        start += 1000
 
 
 def fetch_claims_for_expert_by_status(
@@ -534,6 +584,22 @@ def fetch_best_strategy_match(theme_id: str) -> dict[str, Any] | None:
     if not match_response.data:
         return None
     return fetch_by_id("strategies", match_response.data[0]["strategy_id"])
+
+
+def fetch_insufficient_history_strategies() -> list[dict[str, Any]]:
+    """
+    Strategies parked at backtest_status='insufficient_history', with the
+    reason recorded. Same terminal-state problem as claims'
+    data_unavailable: the backtester re-checks the ones parked only because
+    their entity_class couldn't be resolved, since alias/map growth can fix that.
+    """
+    response = (
+        supabase.table("strategies")
+        .select("id,entity_class,backtest_record")
+        .eq("backtest_status", "insufficient_history")
+        .execute()
+    )
+    return response.data or []
 
 
 def fetch_backtestable_strategies(limit: int = 100) -> list[dict[str, Any]]:

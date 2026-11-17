@@ -24,7 +24,12 @@ from src.db.queries import (
     insert_many,
     update_by_id,
 )
-from src.extraction.extractor import MIN_TRANSCRIPT_CHARS, NonFinancialContentError
+from src.extraction.extractor import (
+    EXTRACTION_MAX_TOKENS,
+    MIN_TRANSCRIPT_CHARS,
+    NonFinancialContentError,
+    save_failed_response,
+)
 from src.extraction.normalization import normalize_entity, normalize_strategies
 from src.llm.claude_client import claude
 
@@ -127,10 +132,17 @@ def extract_strategies_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
         prompt_name="strategy_extraction_v2",
         content=transcript,
         variables=variables,
+        max_tokens=EXTRACTION_MAX_TOKENS,
     )
 
     # --- Step 2: Parse the JSON response ---
-    raw_strategies = parse_strategies_response(response)
+    try:
+        raw_strategies = parse_strategies_response(response)
+    except NonFinancialContentError:
+        raise
+    except ValueError:
+        save_failed_response("strategies", piece.get("id"), response)
+        raise
     if not raw_strategies:
         logger.info(f"No strategies extracted for piece {piece.get('id')}")
         return []

@@ -33,7 +33,12 @@ import pendulum
 from loguru import logger
 
 from src.config.tuning import param
-from src.db.queries import fetch_backtestable_strategies, update_by_id
+from src.db.queries import (
+    fetch_backtestable_strategies,
+    fetch_insufficient_history_strategies,
+    update_by_id,
+)
+from src.extraction.normalization import normalize_entity
 from src.validation.entity_symbol_map import resolve_entity
 from src.validation.market_data import price_on, price_series
 from src.validation.trigger_vocabulary import TRIGGER_DETECTORS
@@ -49,6 +54,10 @@ DEFAULT_BACKTEST_HORIZON_MONTHS = param("backtest.default_horizon_months")
 
 PRICE_LOOKUP_MAX_LOOKBACK_DAYS = 7
 
+
+# A full run (no --max-* flag) means everything pending. The old `or 100`
+# default silently capped nightly runs; 1000 is PostgREST's per-request ceiling.
+FULL_RUN_LIMIT = 1000
 
 def _add_months(d: date, months: int) -> date:
     """Same 30.44-days/month approximation as normalization.compute_target_date."""
@@ -110,13 +119,15 @@ def simulate_strategy(strategy: dict[str, Any]) -> dict[str, Any]:
     Backtest one strategy. Returns the update dict to write to the
     strategies row (backtest_status, backtest_record).
     """
-    entity_class = strategy.get("entity_class")
+    # Canonicalized first: strategies stored before an alias existed
+    # (nifty_50, CRYPTO, nifty_it) otherwise never resolve to a series.
+    entity_class = normalize_entity(strategy.get("entity_class"))
     resolved = resolve_entity(entity_class, geography=None) if entity_class else None
     if resolved is None:
         return {
             "backtest_status": "insufficient_history",
             "backtest_record": {
-                "reason": "entity_class not resolvable to a data source",
+                "reason": UNRESOLVABLE_REASON,
                 "entity_class": entity_class,
             },
         }
@@ -200,12 +211,37 @@ def simulate_strategy(strategy: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+UNRESOLVABLE_REASON = "entity_class not resolvable to a data source"
+
+
+def requeue_newly_resolvable() -> int:
+    """
+    Reset insufficient_history strategies to pending when the only reason
+    was an unresolvable entity_class that now resolves (alias or symbol-map
+    growth). Other reasons (no trigger detector, too few windows) are left
+    alone — nothing about them changes between runs.
+    """
+    requeued = 0
+    for strategy in fetch_insufficient_history_strategies():
+        reason = (strategy.get("backtest_record") or {}).get("reason")
+        if reason != UNRESOLVABLE_REASON:
+            continue
+        canonical = normalize_entity(strategy.get("entity_class"))
+        if canonical and resolve_entity(canonical, geography=None) is not None:
+            update_by_id("strategies", strategy["id"], {"backtest_status": "pending"})
+            requeued += 1
+    if requeued:
+        logger.info(f"Requeued {requeued} strategies whose entity_class now resolves")
+    return requeued
+
+
 def run_backtesting(max_strategies: int | None = None) -> dict[str, int]:
     """
     Run Track B backtesting for strategies where quality_verdict IN
     ('pass', 'partial'), scope='in_scope', and backtest_status='pending'.
     """
-    strategies = fetch_backtestable_strategies(limit=max_strategies or 100)
+    requeue_newly_resolvable()
+    strategies = fetch_backtestable_strategies(limit=max_strategies or FULL_RUN_LIMIT)
     logger.info(f"Found {len(strategies)} backtestable strategies")
 
     counts = {"complete": 0, "insufficient_history": 0, "error": 0, "total": len(strategies)}

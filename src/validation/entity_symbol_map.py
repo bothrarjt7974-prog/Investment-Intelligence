@@ -107,6 +107,20 @@ ENTITY_SYMBOL_MAP: dict[str, tuple[str | None, str]] = {
     "GREENLAM": ("GREENLAM.NS", "yfinance"),
     "CGPOWER": ("CGPOWER.NS", "yfinance"),
     "PATELENG": ("PATELENG.NS", "yfinance"),
+    # 2026-10-05 batch — entities stuck at data_unavailable in real claims.
+    # Lowercase keys are the spellings extraction actually produced (same
+    # convention as "heromotoco" above).
+    "PNBHOUSING": ("PNBHOUSING.NS", "yfinance"),
+    "pnb_hf": ("PNBHOUSING.NS", "yfinance"),
+    "IDFCFIRSTB": ("IDFCFIRSTB.NS", "yfinance"),
+    "idfc_first_bank": ("IDFCFIRSTB.NS", "yfinance"),
+    "AUBANK": ("AUBANK.NS", "yfinance"),
+    "au_small_finance_bank": ("AUBANK.NS", "yfinance"),
+    "bajfinance": ("BAJFINANCE.NS", "yfinance"),
+    # LIC's NSE symbol is LICI, not LIC.
+    "LIC": ("LICI.NS", "yfinance"),
+    "HDFCAMC": ("HDFCAMC.NS", "yfinance"),
+    "hdfc amc": ("HDFCAMC.NS", "yfinance"),
     # --- US stocks (yfinance, bare ticker) ---
     "AAPL": ("AAPL", "yfinance"),
     "MSFT": ("MSFT", "yfinance"),
@@ -221,6 +235,13 @@ UNMAPPABLE: frozenset[str] = frozenset(
         "regulatory_risk",
         "market_sentiment",
         "global_supply_chain",
+        # 2026-10-05: policy/input-cost entities seen in real claims — no
+        # tradeable series that represents them honestly.
+        "india_corporate_tax",
+        "polypropylene_prices",
+        # The Tata *group* (a conglomerate, ~25 listed companies) — no single
+        # series. Specific companies (TCS, TATAMOTORS) are mapped individually.
+        "TATA",
     }
 )
 
@@ -238,6 +259,7 @@ PRIVATE_ENTITIES: frozenset[str] = frozenset(
         "NSE",  # NSE India itself — unlisted as of 2026
         "NPS",  # pension product, not a company
         "PDVSA",  # Venezuelan state oil company — no listed equity
+        "ZERODHA",  # Indian broker, unlisted as of 2026
     }
 )
 
@@ -248,7 +270,8 @@ def resolve_entity(entity: str | None, geography: str | None) -> tuple[str, str]
 
     Lookup order:
       1. Exact match in ENTITY_SYMBOL_MAP (case-sensitive, as stored).
-      2. Explicit UNMAPPABLE membership -> None (documented, not silent).
+      2. Explicit UNMAPPABLE or PRIVATE_ENTITIES membership -> None
+         (documented, not silent — an unlisted company has no price series).
       3. Geography-aware ticker fallback: an uppercase-looking ticker not in
          the map gets .NS appended for geography='india', or used bare for
          geography='us'. Fallback firing is logged so we can promote it to
@@ -263,7 +286,7 @@ def resolve_entity(entity: str | None, geography: str | None) -> tuple[str, str]
     if not entity:
         return None
 
-    if entity in UNMAPPABLE:
+    if entity in UNMAPPABLE or entity in PRIVATE_ENTITIES:
         return None
 
     if entity in ENTITY_SYMBOL_MAP:

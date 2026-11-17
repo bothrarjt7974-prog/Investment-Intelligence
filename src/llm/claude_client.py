@@ -127,6 +127,14 @@ class ClaudeClient:
         text_blocks = [block.text for block in message.content if hasattr(block, "text")]
         result = "\n".join(text_blocks)
 
+        # A response cut off at max_tokens is the likeliest cause of the
+        # repeat "Malformed JSON" extraction failures (long stock lists) —
+        # name it explicitly instead of letting it surface as a parse error.
+        if message.stop_reason == "max_tokens":
+            logger.warning(
+                f"Claude response TRUNCATED at max_tokens={max_tokens} | prompt={prompt_name}"
+            )
+
         # INFO, not DEBUG: cron logs run at INFO, and token counts are the
         # only spend signal we have (no cost table at MVP) — burying them in
         # DEBUG made API spend invisible in every scheduled run.

@@ -29,8 +29,10 @@ from src.db.queries import (
     fetch_themes_ready_for_matching,
     insert_many,
 )
+from src.extraction.normalization import ENTITY_ALIASES
 from src.internal.scoring import DEFAULT_SCORE, LONG_HORIZON_MAX_MONTHS
 from src.strategies.embeddings import get_chroma_collection, get_embedding
+from src.synthesis.entity_hierarchy import ENTITY_HIERARCHY
 from src.validation.entity_symbol_map import UNMAPPABLE
 
 CANDIDATE_POOL_SIZE = param("matcher.candidate_pool_size")
@@ -51,7 +53,7 @@ BROAD_EQUITY_ENTITY_CLASS = "broad_equity"
 # src/fundamentals/data.py) rather than an inferred heuristic.
 _NON_EQUITY_ENTITY_CLASSES = frozenset(
     {
-        "BTC", "ETH", "SOL",
+        "BTC", "ETH", "SOL", "crypto_sector",
         "inr_usd", "jpy_usd", "dxy", "eur_usd",
         "gold", "silver", "crude_oil",
         "rbi_rate", "fed_rate", "india_inflation", "us_inflation", "india_gdp", "us_gdp",
@@ -60,11 +62,30 @@ _NON_EQUITY_ENTITY_CLASSES = frozenset(
 )
 
 
+# A full run (no --max-* flag) means everything pending. The old `or 100`
+# default silently capped nightly runs; 1000 is PostgREST's per-request ceiling.
+FULL_RUN_LIMIT = 1000
+
 def _entity_class_candidates(entity_cluster_key: str) -> list[str]:
-    """Which entity_class values are acceptable matches for this theme."""
-    if entity_cluster_key in _NON_EQUITY_ENTITY_CLASSES:
-        return [entity_cluster_key]
-    return list({entity_cluster_key, BROAD_EQUITY_ENTITY_CLASS})
+    """
+    Which entity_class values are acceptable matches for this theme.
+
+    A theme's key is a hierarchy PARENT (src/synthesis/entity_hierarchy.py:
+    BTC folds into crypto_sector, us_tech into us_tech_ai), but strategies
+    keep the entity_class they were extracted with. Exact-key matching meant
+    the medium-conviction crypto_sector theme saw zero of the library's 8
+    BTC strategies and fell back to a generic stock strategy (2026-10-05).
+    So the candidate set is the key, its hierarchy children, and every
+    known alias spelling of those — the alias part also reaches strategies
+    stored before an alias existed (e.g. nifty_50), with no data rewrite.
+    """
+    family = {entity_cluster_key} | {
+        child for child, parent in ENTITY_HIERARCHY.items() if parent == entity_cluster_key
+    }
+    family |= {alias for alias, canonical in ENTITY_ALIASES.items() if canonical in family}
+    if entity_cluster_key not in _NON_EQUITY_ENTITY_CLASSES:
+        family.add(BROAD_EQUITY_ENTITY_CLASS)
+    return sorted(family)
 
 # CFA/institutional strategies have no expert to derive credibility from —
 # the plan says these "carry high default weight" by construction (they're
@@ -162,10 +183,25 @@ def match_theme_to_strategies(theme: dict[str, Any], top_n: int = 5) -> list[dic
                 "credibility_weight": round(credibility_weight, 2),
                 "backtest_weight": round(backtest_weight, 2),
                 "final_score": round(final_score, 4),
+                "entity_class": strategy.get("entity_class"),
             }
         )
 
-    scored.sort(key=lambda match: match["final_score"], reverse=True)
+    # broad_equity is a FALLBACK, so it ranks after every strategy built for
+    # this theme's own entity family, whatever the scores. WHY (2026-10-05):
+    # once backtests completed, one broad_equity strategy that beat its
+    # Nifty proxy by 45% took rank 1 on nifty50, ZOMATO and others at
+    # semantic similarity ~0.30. That backtest weight was earned on a
+    # different instrument and says nothing about the theme in question.
+    scored.sort(
+        key=lambda match: (
+            match["entity_class"] == BROAD_EQUITY_ENTITY_CLASS
+            and theme["entity_cluster_key"] != BROAD_EQUITY_ENTITY_CLASS,
+            -match["final_score"],
+        )
+    )
+    for match in scored:
+        del match["entity_class"]  # ranking-only, not a theme_strategy_matches column
     top_matches = scored[:top_n]
     for rank, match in enumerate(top_matches, start=1):
         match["rank"] = rank
@@ -179,7 +215,7 @@ def match_theme_to_strategies(theme: dict[str, Any], top_n: int = 5) -> list[dic
 
 def run_matching(max_themes: int | None = None) -> dict[str, int]:
     """Run the matcher for every theme ready for it (fundamentals-passed/downgraded)."""
-    themes = fetch_themes_ready_for_matching(limit=max_themes or 100)
+    themes = fetch_themes_ready_for_matching(limit=max_themes or FULL_RUN_LIMIT)
     logger.info(f"Found {len(themes)} themes ready for matching")
 
     counts = {"matched": 0, "no_candidates": 0, "error": 0, "total": len(themes)}

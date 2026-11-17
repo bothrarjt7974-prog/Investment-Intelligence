@@ -35,6 +35,10 @@ _chroma_client: chromadb.ClientAPI | None = None
 _local_embedder: Any | None = None
 
 
+# A full run (no --max-* flag) means everything pending. The old `or 100`
+# default silently capped nightly runs; 1000 is PostgREST's per-request ceiling.
+FULL_RUN_LIMIT = 1000
+
 def _get_openai_client() -> Any:
     global _openai_client
     if _openai_client is None:
@@ -118,7 +122,7 @@ def embed_strategy(strategy: dict[str, Any]) -> None:
 
 def sync_strategy_embeddings(max_strategies: int | None = None) -> dict[str, int]:
     """Embed every quality-passed, in-scope strategy not yet embedded."""
-    strategies = fetch_strategies_pending_embedding(limit=max_strategies or 100)
+    strategies = fetch_strategies_pending_embedding(limit=max_strategies or FULL_RUN_LIMIT)
     logger.info(f"Found {len(strategies)} strategies pending embedding")
 
     counts = {"embedded": 0, "error": 0, "total": len(strategies)}

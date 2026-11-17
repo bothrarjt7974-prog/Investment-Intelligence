@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pendulum
@@ -40,6 +41,32 @@ class NonFinancialContentError(ValueError):
     claims. Distinct from a real parse failure so the piece is tagged
     'non_financial_content' rather than counted as a pipeline error.
     """
+
+
+# Extraction returns a JSON array that grows with the number of claims; the
+# client's 4096 default truncated long lists (e.g. a 15-company roundup) into
+# unparseable JSON. Billing is per token actually produced, so a higher
+# ceiling costs nothing on normal pieces.
+EXTRACTION_MAX_TOKENS = 16_000
+
+FAILED_RESPONSE_DIR = Path("data/failed_extractions")
+
+
+def save_failed_response(track: str, piece_id: str | None, raw_response: str) -> None:
+    """
+    Keep the raw Claude output of a failed parse on local disk (gitignored).
+
+    WHY: only str(exc) used to be stored, so the remaining repeat
+    "Malformed JSON" failures could never be root-caused (2026-07-11 log) —
+    the one artifact that explains them was thrown away.
+    """
+    try:
+        FAILED_RESPONSE_DIR.mkdir(parents=True, exist_ok=True)
+        path = FAILED_RESPONSE_DIR / f"{track}_{piece_id or 'unknown'}.txt"
+        path.write_text(raw_response, encoding="utf-8")
+        logger.warning(f"Saved unparseable {track} response to {path}")
+    except OSError as exc:
+        logger.warning(f"Could not save failed {track} response: {exc}")
 
 
 def parse_claims_response(raw_response: str) -> list[dict[str, Any]]:
@@ -103,10 +130,17 @@ def extract_claims_for_piece(piece: dict[str, Any]) -> list[dict[str, Any]]:
         prompt_name="claim_extraction_v5",
         content=transcript,
         variables=variables,
+        max_tokens=EXTRACTION_MAX_TOKENS,
     )
 
     # --- Step 2: Parse the JSON response ---
-    raw_claims = parse_claims_response(response)
+    try:
+        raw_claims = parse_claims_response(response)
+    except NonFinancialContentError:
+        raise
+    except ValueError:
+        save_failed_response("claims", piece.get("id"), response)
+        raise
     if not raw_claims:
         logger.info(f"No claims extracted for piece {piece.get('id')}")
         return []

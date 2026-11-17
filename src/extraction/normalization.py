@@ -81,6 +81,9 @@ ENTITY_ALIASES: dict[str, str] = {
     "nifty_midcap_150": "nifty_midcap150",
     "NIFTY_SMALLCAP_250": "nifty_smallcap250",
     "nifty_smallcap_250": "nifty_smallcap250",
+    # 2026-10-05: underscore spellings found in the strategy library that
+    # never reached their theme (nifty_50 was flagged 2026-07-11).
+    "nifty_50": "nifty50",
     "NASDAQ": "nasdaq",
     "Nasdaq": "nasdaq",
     "SP500": "sp500",
@@ -92,6 +95,11 @@ ENTITY_ALIASES: dict[str, str] = {
     "indian_IT": "indian_it",
     "indian_technology": "indian_it",
     "indian_tech": "indian_it",
+    "indian_it_services": "indian_it",
+    "nifty_it": "indian_it",
+    "nifty_pharma": "indian_pharma",
+    "indian_small_cap": "indian_smallcap",
+    "indian_small_midcap": "indian_smallcap",
     "indian_real_estate": "indian_realestate",
     "india_real_estate": "indian_realestate",
     "real_estate_india": "indian_realestate",
@@ -107,6 +115,13 @@ ENTITY_ALIASES: dict[str, str] = {
     "us_technology": "us_tech",
     "us_equity": "us_equities",
     "us_equity_market": "us_equities",
+    "us_large_cap_equity": "us_equities",
+    # --- Thematic ---
+    "ai_technology": "global_ai",
+    "artificial_intelligence": "global_ai",
+    "CRYPTO": "crypto_sector",
+    "crypto": "crypto_sector",
+    "cryptocurrency": "crypto_sector",
     "us_small_cap_ai": "us_smallcap",
     "us_smallcap_ai": "us_smallcap",
     # --- Macro factors ---

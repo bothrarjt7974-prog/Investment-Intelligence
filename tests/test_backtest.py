@@ -190,6 +190,7 @@ def test_run_backtesting_counts_by_status(monkeypatch):
 
     monkeypatch.setattr(backtest, "simulate_strategy", fake_simulate)
     monkeypatch.setattr(backtest, "update_by_id", lambda table, row_id, fields: updates.setdefault(row_id, fields))
+    monkeypatch.setattr(backtest, "requeue_newly_resolvable", lambda: 0)
 
     counts = backtest.run_backtesting()
 

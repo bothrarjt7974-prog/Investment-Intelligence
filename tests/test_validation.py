@@ -49,7 +49,7 @@ def _mock_prices(monkeypatch, price_at_claim, price_at_target, series=None):
     monkeypatch.setattr(validator, "price_series", fake_price_series)
     # Default: pretend every symbol is already backfilled, so tests don't
     # silently hit the real Supabase/yfinance on-demand path.
-    monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: True)
+    monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol, **kw: True)
 
 
 # =====================================================================
@@ -227,7 +227,7 @@ class TestNonTestableClaims:
             return None
 
         monkeypatch.setattr(validator, "price_on", fake_price_on)
-        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: True)
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol, **kw: True)
         result = validator.validate_one_claim(make_claim())
         assert result["verification_status"] == "data_unavailable"
 
@@ -251,7 +251,7 @@ class TestNonTestableClaims:
 
         monkeypatch.setattr(validator, "price_on", fake_price_on)
         monkeypatch.setattr(validator, "price_series", fake_price_series)
-        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: True)
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol, **kw: True)
 
         result = validator.validate_one_claim(
             make_claim(entity="nifty50", geography="india", direction="bullish")
@@ -324,6 +324,29 @@ class TestEnsureSymbolBackfilled:
 
         assert market_data.ensure_symbol_backfilled("DELISTEDCO", "DELISTEDCO.NS") is False
 
+    def test_refetches_when_history_starts_after_claim_date(self, monkeypatch):
+        # 2026-10-05: 67 symbols had only July-onward rows from an incremental
+        # update and looked "covered" to every older claim.
+        monkeypatch.setattr(market_data, "fetch_earliest_snapshot_date", lambda symbol: "2026-07-07")
+        called = {}
+
+        def fake_backfill(symbol, fetch_symbol, start_date):
+            called["start"] = start_date
+            return (1500, None)
+
+        monkeypatch.setattr(market_data, "backfill_symbol", fake_backfill)
+        assert market_data.ensure_symbol_backfilled("TECHM", "TECHM.NS", needed_from="2024-03-01")
+        assert called["start"] == "2019-01-01"
+
+    def test_noop_when_history_covers_claim_date(self, monkeypatch):
+        monkeypatch.setattr(market_data, "fetch_earliest_snapshot_date", lambda symbol: "2019-01-02")
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("covered history must not refetch")
+
+        monkeypatch.setattr(market_data, "backfill_symbol", fail_if_called)
+        assert market_data.ensure_symbol_backfilled("TECHM", "TECHM.NS", needed_from="2024-03-01")
+
     def test_manual_source_claims_never_trigger_backfill(self, monkeypatch):
         # Manual macro entities (rbi_rate, etc.) come from CSVs, not yfinance —
         # validate_one_claim must skip ensure_symbol_backfilled for source='manual'.
@@ -339,7 +362,7 @@ class TestEnsureSymbolBackfilled:
         assert result["verification_status"] == "data_unavailable"
 
     def test_data_unavailable_when_on_demand_backfill_fails(self, monkeypatch):
-        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol: False)
+        monkeypatch.setattr(validator, "ensure_symbol_backfilled", lambda symbol, fetch_symbol, **kw: False)
 
         result = validator.validate_one_claim(
             make_claim(entity="INDIGO", geography="india", direction="bullish")
@@ -447,3 +470,60 @@ class TestPriceOnFallback:
     def test_returns_none_when_no_row_found(self, monkeypatch):
         monkeypatch.setattr(market_data, "fetch_latest_market_price", lambda *a, **k: None)
         assert market_data.price_on("AAPL", "2024-06-15") is None
+
+
+# =====================================================================
+# Self-healing (2026-10-05): data_unavailable retries and gap-proof daily
+# market data — both silent failure modes found after a 3-month cron gap.
+# =====================================================================
+
+
+class TestRequeueResolvableUnavailable:
+    def test_requeues_only_claims_whose_entity_now_resolves(self, monkeypatch):
+        claims = [
+            {"id": "a", "entity": "ZOMATO", "geography": "india"},  # mapped since
+            {"id": "b", "entity": "global_liquidity", "geography": "global"},  # UNMAPPABLE
+            {"id": "c", "entity": "ZERODHA", "geography": "india"},  # private company
+        ]
+        monkeypatch.setattr(validator, "fetch_data_unavailable_claims", lambda: claims)
+        monkeypatch.setattr(validator, "fetch_earliest_snapshot_date", lambda e: None)
+        updates = []
+        monkeypatch.setattr(validator, "update_by_id", lambda t, i, u: updates.append((i, u)))
+
+        assert validator.requeue_resolvable_unavailable() == 1
+        assert updates == [("a", {"verification_status": "pending"})]
+
+
+    def test_skips_pre_listing_claims_and_unloaded_manual_series(self, monkeypatch):
+        claims = [
+            {"id": "ipo", "entity": "PAYTM", "geography": "india", "claimed_at": "2021-06-17T00:00:00+00:00"},
+            {"id": "gdp", "entity": "india_gdp", "geography": "india", "claimed_at": "2021-07-10T00:00:00+00:00"},
+            {"id": "ok", "entity": "PAYTM", "geography": "india", "claimed_at": "2023-01-05T00:00:00+00:00"},
+        ]
+        earliest = {"PAYTM": "2021-11-18", "india_gdp": None}
+        monkeypatch.setattr(validator, "fetch_data_unavailable_claims", lambda: claims)
+        monkeypatch.setattr(validator, "fetch_earliest_snapshot_date", lambda e: earliest[e])
+        updates = []
+        monkeypatch.setattr(validator, "update_by_id", lambda t, i, u: updates.append(i))
+
+        assert validator.requeue_resolvable_unavailable() == 1
+        assert updates == ["ok"]
+
+
+class TestDailyUpdateStart:
+    def test_resumes_from_latest_stored_date_after_a_gap(self, monkeypatch):
+        monkeypatch.setattr(market_data, "fetch_latest_snapshot_date", lambda: "2026-07-14")
+        seen = {}
+        monkeypatch.setattr(market_data, "backfill_all", lambda start_date: seen.setdefault("s", start_date))
+        market_data.daily_update()
+        assert seen["s"] == "2026-07-07"
+
+    def test_normal_night_uses_last_seven_days(self, monkeypatch):
+        import pendulum
+
+        today = pendulum.now("UTC").to_date_string()
+        monkeypatch.setattr(market_data, "fetch_latest_snapshot_date", lambda: today)
+        seen = {}
+        monkeypatch.setattr(market_data, "backfill_all", lambda start_date: seen.setdefault("s", start_date))
+        market_data.daily_update()
+        assert seen["s"] == pendulum.now("UTC").subtract(days=7).to_date_string()

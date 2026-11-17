@@ -30,6 +30,7 @@ ENTITY_HIERARCHY: dict[str, str] = {
     "us_software": "us_tech_ai",
     "us_semiconductors": "us_tech_ai",
     "nasdaq": "us_tech_ai",
+    "qqq": "us_tech_ai",  # Nasdaq-100 tracker — same story as nasdaq
     "NVDA": "us_tech_ai",
     "MSFT": "us_tech_ai",
     "GOOGL": "us_tech_ai",
@@ -62,6 +63,7 @@ ENTITY_HIERARCHY: dict[str, str] = {
     # --- Crypto ---
     "BTC": "crypto_sector",
     "ETH": "crypto_sector",
+    "SOL": "crypto_sector",
     # --- Spelling canonicalization (same company, two extractions) ---
     "SPCX": "SPACEX",
 }

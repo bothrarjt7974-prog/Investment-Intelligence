@@ -88,7 +88,8 @@ class ClaudeClient:
         content: str,
         variables: dict[str, str] | None = None,
         model: str | None = None,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
+        effort: str = "low",
     ) -> str:
         """
         Make a Claude API call.
@@ -99,6 +100,15 @@ class ClaudeClient:
             variables: optional {{var}} substitutions in the prompt template
             model: override default model selection (otherwise uses bulk model)
             max_tokens: response token limit
+            effort: output_config.effort — on the 5.5-generation models,
+                extended thinking cannot be disabled and its tokens count
+                against max_tokens. "low" is the right default for this
+                method's callers (classification/filtering/extraction —
+                none of them are long-horizon reasoning tasks), and it
+                leaves more of max_tokens for the actual response, which
+                matters because this is the exact failure mode
+                (claim_extraction_v5's "malformed JSON" fix) a thinking
+                budget eating into max_tokens would reintroduce.
 
         Returns:
             The text content of Claude's response.
@@ -120,6 +130,7 @@ class ClaudeClient:
         message = self.client.messages.create(
             model=model_to_use,
             max_tokens=max_tokens,
+            output_config={"effort": effort},
             messages=[{"role": "user", "content": full_prompt}],
         )
 
@@ -151,12 +162,19 @@ class ClaudeClient:
         prompt_name: str,
         content: str,
         variables: dict[str, str] | None = None,
-        max_tokens: int = 8192,
+        max_tokens: int = 16000,
+        effort: str = "medium",
     ) -> str:
         """
         Call Claude for high-stakes synthesis using the Opus model.
         Use this for: morning briefing generation, complex reasoning comparison,
         final consolidated outputs.
+
+        effort defaults to "medium" (Opus 5.5's own default) — theme
+        synthesis and guidance generation are genuine multi-step reasoning,
+        unlike call()'s classification-style callers, so they keep more
+        thinking budget. max_tokens raised to 16000 for the same reason as
+        call()'s default: thinking tokens now come out of this same budget.
         """
         return self.call(
             prompt_name=prompt_name,
@@ -164,6 +182,7 @@ class ClaudeClient:
             variables=variables,
             model=settings.claude_model_synthesis,
             max_tokens=max_tokens,
+            effort=effort,
         )
 
 
